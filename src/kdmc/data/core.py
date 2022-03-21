@@ -5,15 +5,16 @@ from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 
 def get_datasets(args):
     if args.dataset == 'rml2016.10a':
-        get_rml2016_10a_datasets(f'{args.root_path}/data')
-
-
-def get_normalizer(dataset):
-    pass
+        return get_rml2016_10a_datasets(f'{args.root_path}/data')
+    else:
+        raise NotImplementedError(f"dataset not implemented: {args.dataset}")
 
 
 def get_num_classes(dataset):
-    pass
+    if dataset == 'rml2016.10a':
+        return 11
+    else:
+        raise NotImplementedError(f"dataset not implemented: {args.dataset}")
 
 
 def get_input_dims(args):

@@ -2,7 +2,6 @@ import random
 import numpy as np
 import torch
 import wandb
-from kdmc.attack.core import parse_attack
 from kdmc.data.core import create_dataloaders, get_datasets
 
 from kdmc.parser import parse_args
@@ -13,7 +12,7 @@ def main():
     
     args = parse_args()
 
-    wandb.init(project=f"dk_{args.dataset}", name=args.id)
+    wandb.init(project=f"kdmc_{args.dataset}", name=args.id)
     wandb.config.update(args)
 
     # Seed
@@ -25,6 +24,7 @@ def main():
     print('==> Preparing data..')
     trainset, testset = get_datasets(args)
     trainloader, testloader = create_dataloaders(args, trainset, testset)
+    args.time_samples = trainset.dataset.time_samples
 
     # Model
     print('==> Building model..')
@@ -38,7 +38,6 @@ def main():
     if args.resume:
         raise NotImplementedError
 
-    attack = parse_attack(net, args.atk)
     trainer = get_trainer(args, net, trainloader, testloader, optimizer, scheduler, schd_updt, args.save_freq)
     for epoch in range(start_epoch, args.n_epochs + 1):
         trainer.loop(epoch)

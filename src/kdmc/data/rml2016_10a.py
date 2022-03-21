@@ -31,9 +31,6 @@ def get_rml2016_10a_datasets(path, time_samples=None, return_idxs=False, seed=0)
     trainset = Subset(full, train_idxs)
     testset = Subset(full, test_idxs)
 
-    if return_idxs:
-        trainset = IndexableDataset(trainset)
-        testset = IndexableDataset(testset)
     return trainset, testset
 
 
@@ -63,6 +60,7 @@ class RML2016_10A_D(Dataset):
         folder = os.path.join(self.data_path, self.folder)
         os.makedirs(folder, exist_ok=True)
         self.dataset_path = os.path.join(folder, "RML2016.10a_dict.pkl")
+        self.time_samples = self.T_SAMPLES
         if time_samples is not None:
             if time_samples > self.T_SAMPLES:
                 print(
@@ -94,7 +92,7 @@ class RML2016_10A_D(Dataset):
             modulation.append(mod)
             snrs.append(snr)
             iq.append(value[..., :self.time_samples])
-        modulation = np.concatenate(modulation, axis=0)
+        modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snrs, axis=0)
         iq = np.concatenate(iq, axis=0)
         return iq, modulation, snr

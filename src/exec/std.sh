@@ -1,0 +1,1 @@
+python src/main.py --dataset rml2016.10a --loss std --n_epochs 5

@@ -11,8 +11,8 @@ class STDTrainer(Trainer):
         train_loss = 0
         correct = 0
         total = 0
-        for batch_idx, (inputs, targets) in enumerate(tqdm(self.train_dl)):
-            inputs, targets = inputs.to(self.device), targets.to(self.device)
+        for batch_idx, batch in enumerate(tqdm(self.train_dl)):
+            inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
             outputs = self.net(inputs)
             self.optimizer.zero_grad()
             loss = F.cross_entropy(outputs, targets)

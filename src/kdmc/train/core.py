@@ -3,22 +3,21 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
-from kdmc.data.core import get_normalizer, get_num_classes
+from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
 from kdmc.train.at import ATTrainer
 from kdmc.train.rslad import RSLADTrainer
-
 from kdmc.train.std import STDTrainer
+from kdmc.model.resnet import ResNet_OShea
+
 
 def create_model(args, num_classes=None):
-    normalizer = get_normalizer(args.dataset)
     if num_classes is None:
         num_classes = get_num_classes(args.dataset)
-    if args.arch == '':
-        pass
+    if args.arch == 'resnet':
+        net = ResNet_OShea(num_classes, args.time_samples)
     else:
         raise NotImplementedError(f"arch not implemented: {args.arch}")
-    net = nn.Sequential(normalizer, net)
     net = net.to(args.device)
     if args.device == 'cuda':
         net = torch.nn.DataParallel(net)
@@ -57,7 +56,9 @@ def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_up
         return STDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at':
         return ATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-    elif args.loss == 'at_akd':
+    elif args.loss == 'akd':
         return AKDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     elif args.loss == 'rslad':
         return RSLADTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
+    else:
+        raise NotImplementedError(f"loss not implemented: {args.loss}")

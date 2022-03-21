@@ -6,10 +6,10 @@ import torch
 from tqdm import tqdm
 import wandb
 import torch.nn.functional as F
+from kdmc.attack.core import SPR_Attack
 
 from kdmc.attack.pgd import PGD
 from kdmc.data.core import get_num_classes
-from kdmc.train.core import create_model
 
 
 class Trainer(abc.ABC):
@@ -60,8 +60,8 @@ class Trainer(abc.ABC):
         }
         total = 0
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_dl)):
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+            for batch_idx, batch in enumerate(tqdm(self.test_dl)):
+                inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
                 outputs = self.net(inputs)
                 loss = F.cross_entropy(outputs, targets)
                 test_loss['clean'] += loss.item()
@@ -87,8 +87,8 @@ class Trainer(abc.ABC):
             test_loss[key] = 0
             correct[key] = 0
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_dl)):
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+            for batch_idx, batch in enumerate(tqdm(self.test_dl)):
+                inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
                 outputs = self.net(inputs)
                 loss = F.cross_entropy(outputs, targets)
                 test_loss['clean'] += loss.item()
@@ -126,8 +126,8 @@ class Trainer(abc.ABC):
             test_loss[key] = 0
             correct[key] = 0
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_dl)):
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+            for batch_idx, batch in enumerate(tqdm(self.test_dl)):
+                inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
                 outputs = self.net(inputs)
                 loss = F.cross_entropy(outputs, targets)
                 test_loss['clean'] += loss.item()
@@ -171,12 +171,12 @@ class Trainer(abc.ABC):
 
     def get_val_attacks(self):
         return {
-            'pgd_eps8': PGD(self.net, eps=0.5, alpha=0.1, steps=10),  # Not clamped
+            'pgd-7_20dB': SPR_Attack(PGD(self.net, steps=7), 20, 0.25),  # Not clamped
         }
         
     def get_test_attacks(self):
         return {
-            'pgd_eps8': PGD(self.net, eps=8/255, alpha=2/255, steps=7)
+            'pgd-7_20dB': SPR_Attack(PGD(self.net, steps=7), 20, 0.25)
         }
 
 
@@ -199,6 +199,7 @@ class KTTrainer(Trainer):
 
     @classmethod
     def load_kt_model(cls, args, kt_path, ens_epoch):
+        from kdmc.train.core import create_model
         if kt_path.startswith('robustbench'):
             from robustbench.utils import load_model
             net = load_model(model_name=kt_path.split('/')[1], dataset='cifar10', threat_model='Linf', model_dir=f'{args.root_path}/models/robustbench/')
