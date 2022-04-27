@@ -345,4 +345,4 @@ for i=1:maxNumberSignals
 end
 
 
-save('dataset1024_4sps.mat','ds','-v7.3');
+save('dataset1024.mat','ds','-v7.3');

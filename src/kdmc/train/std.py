@@ -24,6 +24,9 @@ class STDTrainer(Trainer):
             train_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            if len(targets.shape) > 1:
+                correct += predicted.eq(targets.argmax(1)).sum().item()
+            else:
+                correct += predicted.eq(targets).sum().item()
 
         wandb.log({'train.acc': 100.*correct/total, 'train.loss': train_loss/(batch_idx+1), 'epoch': epoch})
