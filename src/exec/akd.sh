@@ -1,0 +1,1 @@
+python src/main.py --dataset sbasic --loss akd --kt_path sbasic/resnet/std/0 --kt_alpha 1.0 --n_epochs 50 --sch_gamma 0.95 --id akd_std

@@ -24,7 +24,11 @@ class AKDTrainer(KTTrainer):
             outputs = self.net(adv_inputs)
             self.optimizer.zero_grad()
             kt_preds = self.pred_kt(adv_inputs)
-            kt_targets = self.alpha * kt_preds + (1 - self.alpha) * F.one_hot(targets, num_classes=kt_preds.shape[-1])
+            if len(targets.shape) > 1:
+                kt_targets = self.alpha * kt_preds + (1 - self.alpha) * targets
+            else:
+                kt_targets = self.alpha * kt_preds + (1 - self.alpha) * F.one_hot(targets, num_classes=kt_preds.shape[-1])
+            
             loss = softXEnt(outputs, kt_targets)
             loss.backward()
             self.optimizer.step()
@@ -34,6 +38,9 @@ class AKDTrainer(KTTrainer):
             train_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            if len(targets.shape) > 1:
+                correct += predicted.eq(targets.argmax(1)).sum().item()
+            else:
+                correct += predicted.eq(targets).sum().item()
 
         wandb.log({'train.acc': 100.*correct/total, 'train.loss': train_loss/(batch_idx+1), 'epoch': epoch})

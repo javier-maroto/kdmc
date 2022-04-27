@@ -1,6 +1,8 @@
 import abc
 from copy import deepcopy
 import os
+import pandas as pd
+import numpy as np
 
 import torch
 from tqdm import tqdm
@@ -10,6 +12,7 @@ from kdmc.attack.core import SPR_Attack
 
 from kdmc.attack.pgd import PGD
 from kdmc.data.core import get_num_classes
+from kdmc.plot import plot_acc_vs_snr
 
 
 class Trainer(abc.ABC):
@@ -67,7 +70,10 @@ class Trainer(abc.ABC):
                 test_loss['clean'] += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                correct['clean'] += predicted.eq(targets).sum().item()
+                if len(targets.shape) > 1:
+                    correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
+                else:
+                    correct['clean'] += predicted.eq(targets).sum().item()
 
         wandb.log({
             'test.acc': 100.*correct['clean']/total, 'test.loss': test_loss['clean']/(batch_idx+1),
@@ -94,7 +100,10 @@ class Trainer(abc.ABC):
                 test_loss['clean'] += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                correct['clean'] += predicted.eq(targets).sum().item()
+                if len(targets.shape) > 1:
+                    correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
+                else:
+                    correct['clean'] += predicted.eq(targets).sum().item()
 
                 for key, atk in slow_atks.items():
                     with torch.enable_grad():
@@ -103,7 +112,10 @@ class Trainer(abc.ABC):
                     loss = F.cross_entropy(outputs, targets)
                     test_loss[key] += loss.item()
                     _, predicted = outputs.max(1)
-                    correct[key] += predicted.eq(targets).sum().item()
+                    if len(targets.shape) > 1:
+                        correct[key] += predicted.eq(targets.argmax(1)).sum().item()
+                    else:
+                        correct[key] += predicted.eq(targets).sum().item()
 
         log_dict = {f'test.{key}_acc': 100.*correct[key]/total for key in slow_atks}
         log_dict.update({f'test.{key}_loss': test_loss[key]/(batch_idx+1) for key in slow_atks})
@@ -113,27 +125,32 @@ class Trainer(abc.ABC):
             'lr': self.scheduler.get_last_lr()[0], 'epoch': epoch})
 
     def test(self):
+        res_path = os.path.join("results", self.id)
+        if not os.path.exists(res_path):
+            os.makedirs(res_path)
+        
         self.net.eval()
-        test_loss = {
-            'clean': 0
-        }
-        correct = {
-            'clean': 0
-        }
+        test_loss = {'clean': 0}
+        res = {'true': [], 'clean': [], 'snr': []}
         total = 0
         slow_atks = self.get_test_attacks()
         for key in slow_atks:
             test_loss[key] = 0
-            correct[key] = 0
+            res[key] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(self.test_dl)):
                 inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
                 outputs = self.net(inputs)
                 loss = F.cross_entropy(outputs, targets)
                 test_loss['clean'] += loss.item()
-                _, predicted = outputs.max(1)
+                predicted = outputs.argmax(1)
                 total += targets.size(0)
-                correct['clean'] += predicted.eq(targets).sum().item()
+                if len(targets.shape) > 1:
+                    res['true'].extend(batch['y'].argmax(1).numpy())
+                else:
+                    res['true'].extend(batch['y'].numpy())
+                res['clean'].extend(predicted.cpu().numpy())
+                res['snr'].extend(batch['snr'].numpy())
 
                 for key, atk in slow_atks.items():
                     with torch.enable_grad():
@@ -142,14 +159,20 @@ class Trainer(abc.ABC):
                     loss = F.cross_entropy(outputs, targets)
                     test_loss[key] += loss.item()
                     _, predicted = outputs.max(1)
-                    correct[key] += predicted.eq(targets).sum().item()
-
-        log_dict = {f'test.{key}_acc': 100.*correct[key]/total for key in slow_atks}
+                    res[key].extend(predicted.cpu().numpy())
+        for key, value in res.items():
+            res[key] = np.array(value)
+        df = pd.DataFrame(res)
+        df['acc'] = df['true']==df['clean']
+        df_snr = df.groupby('snr', as_index=False)['acc'].mean().sort_values('snr')
+        fig = plot_acc_vs_snr(df_snr.acc, df_snr.snr, title="Accuracy vs SNR")
+        fig.savefig(os.path.join(res_path, "acc_vs_snr.png"))
+        log_dict = {f'test.{key}_acc': 100.*(df['true']==df[key]).mean() for key in slow_atks}
         log_dict.update({f'test.{key}_loss': test_loss[key]/(batch_idx+1) for key in slow_atks})
         wandb.log(log_dict, commit=False)
         wandb.log({
-            'test.acc': 100.*correct['clean']/total, 'test.loss': test_loss['clean']/(batch_idx+1)})
-
+            'test.acc': 100.*df.acc.mean(), 'test.loss': test_loss['clean']/(batch_idx+1)})
+    
     def save_ckpt(self, epoch):
         # Save checkpoint.
         print('Saving..')
