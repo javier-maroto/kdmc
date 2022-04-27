@@ -25,7 +25,10 @@ allowOverlapping=false;
 Nts=1;
 Nt=3;
 
-ds=struct();
+tx_b=struct();
+tx_x=struct();
+rx_x=struct();
+rx_b=struct();
 
 %for each signal in mixture power attenuation is chosen uniform-randomly
 %from the given range
@@ -99,7 +102,7 @@ for i=1:maxNumberSignals
                 value(j,:,:)=frame_shaped;
                 
             end
-            ds=setfield(ds,key,value);
+            rx_x=setfield(rx_x,key,value);
             
         end
     end
@@ -146,8 +149,8 @@ for i=1:maxNumberSignals
                     value=zeros(Ns,3*Nts,sample_length);        
 
                     for k=1:Ns
-                        x=dataSource();
-                        y=modulator(x);
+                        rx_x=dataSource();
+                        y=modulator(rx_x);
 
                         if(Ms(sps_i)>1)
                             if contains(char(modulationTypes(modType)),...
@@ -193,7 +196,7 @@ for i=1:maxNumberSignals
 
 
                     end
-                    ds=setfield(ds,key,value);
+                    rx_x=setfield(rx_x,key,value);
                 end
             end
             end
@@ -295,8 +298,8 @@ for i=1:maxNumberSignals
                             sps,Nt*sample_length,fs);
                         modulator=getModulator(modulationTypes(ran_mod_types(m)),...
                             sps,fs);
-                        x=dataSource();
-                        x_mod=modulator(x);
+                        rx_x=dataSource();
+                        x_mod=modulator(rx_x);
                         pfo=comm.PhaseFrequencyOffset('SampleRate',fs, ...
                           'FrequencyOffset',frequencyOffsets(ran_freq_offsets(m)));
                         x_mod=pfo(x_mod);
@@ -337,7 +340,7 @@ for i=1:maxNumberSignals
                        frequencyOffsetsLabel,'None',i};
                 key=join(string(label),'rer');
                 key=strrep(key,'-','neg');
-                ds=setfield(ds,key,value);
+                rx_x=setfield(rx_x,key,value);
             end
         end
         
@@ -345,4 +348,4 @@ for i=1:maxNumberSignals
 end
 
 
-save('dataset1024_4sps.mat','ds','-v7.3');
+save('dataset1024_4sps.mat','rx_x','-v7.3');
