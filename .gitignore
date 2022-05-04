@@ -136,6 +136,6 @@ dmypy.json
 
 # Folders
 wandb
-data
+data/*
 checkpoint
 results
