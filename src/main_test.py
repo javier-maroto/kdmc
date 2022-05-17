@@ -29,7 +29,7 @@ def main():
     # Model
     print('==> Building model..')
     net = create_model(args)
-    ckpt = torch.load(args.resume)
+    ckpt = torch.load(f"{args.root_path}/checkpoint/{args.dataset}/{args.arch}/{args.id}/{args.seed}/ckpt_last.pth")
     net.load_state_dict(ckpt["net"])
     net.to(args.device)
     net.eval()

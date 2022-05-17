@@ -57,7 +57,7 @@ class SBasic(Dataset):
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
         if not os.path.isfile(os.path.join(self.data_path, self.filename)):
             self.create_dataset()
-        self.iq, self.modulation, self.y, self.snr = self.load()
+        self.iq, self.modulation, self.y, self.snr, self.snr_filt = self.load()
         self.len = self.iq.shape[0]
 
     def compute_snr(self, signal, noise):
@@ -91,7 +91,7 @@ class SBasic(Dataset):
         rx_x = []
         y = []
         snr = []
-        rx_s, tx_s = [], []
+        rx_s, tx_s, yml_est, yml_nf = [], [], [], []
         for path in tqdm(basic_paths):
             # Load iq data
             data = scipy.io.loadmat(os.path.join(self.data_path, "rx_x", path))["rx_x"]
@@ -112,6 +112,9 @@ class SBasic(Dataset):
             data = scipy.io.loadmat(os.path.join(self.data_path, "tx_s", path))["tx_s"]
             data = np.stack([data.real, data.imag], axis=1)
             tx_s.append(data.astype(np.float32))
+            # Load yml_est and yml_nf
+            yml_est.append(scipy.io.loadmat(os.path.join(self.data_path, "yml_est", path))['yml_est'])
+            yml_nf.append(scipy.io.loadmat(os.path.join(self.data_path, "yml_nf", path))['yml_nf'])
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
@@ -119,6 +122,8 @@ class SBasic(Dataset):
         y = np.concatenate(y, axis=0, dtype=np.float32)
         rx_s = np.concatenate(rx_s, axis=0)
         tx_s = np.concatenate(tx_s, axis=0)
+        yml_est = np.concatenate(yml_est, axis=0)
+        yml_nf = np.concatenate(yml_nf, axis=0)
 
         snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
         
@@ -128,7 +133,8 @@ class SBasic(Dataset):
 
         np.savez(
             os.path.join(self.data_path, self.filename_big),
-            iq=rx_x, modulation=modulation, y=y, snr=snr, rx_s=rx_s, tx_s=tx_s)
+            iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt, rx_s=rx_s, tx_s=tx_s,
+            yml_est=yml_est, yml_nf=yml_nf)
 
     def load(self):
         """Returns the pytables arrays for the iq signals, modulations and snrs"""
@@ -137,8 +143,9 @@ class SBasic(Dataset):
         modulation = data['modulation']
         y = data['y']
         snr = data['snr']
+        snr_filt = data['snr_filt']
         
-        return iq, modulation, y, snr
+        return iq, modulation, y, snr, snr_filt
 
     def __len__(self):
         return self.len
@@ -148,6 +155,7 @@ class SBasic(Dataset):
             "x": self.iq[idx],
             "y": self.y[idx],
             "snr": self.snr[idx],
+            "snr_filt": self.snr_filt[idx],
             "idx": idx,
             "fs": 2e5,
             "sps": 8,

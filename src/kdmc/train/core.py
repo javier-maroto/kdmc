@@ -5,9 +5,9 @@ import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
-from kdmc.train.at import ATTrainer
+from kdmc.train.at import ATTrainer, LNRATTrainer, MLATTrainer
 from kdmc.train.rslad import RSLADTrainer
-from kdmc.train.std import STDTrainer
+from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, STDTrainer
 from kdmc.model.resnet import ResNet_OShea
 
 
@@ -60,5 +60,13 @@ def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_up
         return AKDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     elif args.loss == 'rslad':
         return RSLADTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
+    elif args.loss == 'std_ml':
+        return MLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_ml':
+        return MLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'std_lnr':
+        return LNRSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_lnr':
+        return LNRATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     else:
         raise NotImplementedError(f"loss not implemented: {args.loss}")

@@ -11,9 +11,9 @@ def get_datasets(args):
     elif args.dataset == 's1024':
         return get_s1024_datasets(f'{args.root_path}/data')
     elif args.dataset == 'sbasic':
-        return get_sbasic_datasets(f'{args.root_path}/data', args.time_samples, args.seed, args.return_ml)
+        return get_sbasic_datasets(f'{args.root_path}/data', args.time_samples, args.seed)
     elif args.dataset == 'sbasic_nf':
-        return get_sbasic_datasets(f'{args.root_path}/data', args.time_samples, args.seed, args.return_ml, use_filters=False)
+        return get_sbasic_datasets(f'{args.root_path}/data', args.time_samples, args.seed, use_filters=False)
     else:
         raise NotImplementedError(f"dataset not implemented: {args.dataset}")
 

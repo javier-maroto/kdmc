@@ -1,18 +1,21 @@
 import abc
 from copy import deepcopy
+from functools import partial
 import os
 import pandas as pd
 import numpy as np
 
 import torch
+import torch.nn as nn
 from tqdm import tqdm
 import wandb
 import torch.nn.functional as F
 from kdmc.attack.core import SPR_Attack
 
 from kdmc.attack.pgd import PGD
-from kdmc.data.core import get_num_classes
+from kdmc.model.max_likelihood import MaxLikelihoodModel
 from kdmc.plot import plot_acc_vs_snr
+from kdmc.train.testing import get_acc_metrics, get_cosine_similarity_ml
 
 
 class Trainer(abc.ABC):
@@ -31,6 +34,9 @@ class Trainer(abc.ABC):
         self.slow_rate = slow_rate
         self.device = args.device
         self.save_inter = args.save_inter
+        self.ml_model = MaxLikelihoodModel(
+            f'{args.root_path}/data/synthetic/signal/states', device=self.device)
+        self.ml_model.create_filter()
 
     def loop_fast(self, epoch):
         self.train(epoch)
@@ -55,73 +61,67 @@ class Trainer(abc.ABC):
 
     def val_fast(self, epoch):
         self.net.eval()
-        test_loss = {
-            'clean': 0
-        }
         correct = {
-            'clean': 0
+            'clean': 0,
+            'clean_ml': 0,
         }
         total = 0
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(self.test_dl)):
                 inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
                 outputs = self.net(inputs)
-                loss = F.cross_entropy(outputs, targets)
-                test_loss['clean'] += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                if len(targets.shape) > 1:
-                    correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
-                else:
-                    correct['clean'] += predicted.eq(targets).sum().item()
+                correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
+                # Compute ML accuracy
+                ml_preds = self.ml_model.compute_ml(inputs, batch['snr_filt'].to(self.device))
+                correct['clean_ml'] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
         wandb.log({
-            'test.acc': 100.*correct['clean']/total, 'test.loss': test_loss['clean']/(batch_idx+1),
+            'test.acc': 100.*correct['clean']/total, 'test.acc_ml': 100.*correct['clean_ml']/total,
             'lr': self.scheduler.get_last_lr()[0], 'epoch': epoch})
 
     def val_slow(self, epoch):
         self.net.eval()
-        test_loss = {
-            'clean': 0
-        }
         correct = {
-            'clean': 0
+            'clean': 0,
+        }
+        ml_correct = {
+            'clean': 0,
         }
         total = 0
         slow_atks = self.get_val_attacks()
         for key in slow_atks:
-            test_loss[key] = 0
             correct[key] = 0
+            ml_correct[key] = 0
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(self.test_dl)):
                 inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
+                snr = batch['snr'].to(self.device)
+                snr_ml = batch['snr_filt'].to(self.device)
                 outputs = self.net(inputs)
-                loss = F.cross_entropy(outputs, targets)
-                test_loss['clean'] += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                if len(targets.shape) > 1:
-                    correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
-                else:
-                    correct['clean'] += predicted.eq(targets).sum().item()
+                correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
+                # Compute ML accuracy
+                ml_preds = self.ml_model.compute_ml(inputs, snr_ml)
+                ml_correct['clean'] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
                 for key, atk in slow_atks.items():
                     with torch.enable_grad():
-                        x_adv = atk(inputs, targets)
+                        x_adv = atk(inputs, targets, snr)
                     outputs = self.net(x_adv)
-                    loss = F.cross_entropy(outputs, targets)
-                    test_loss[key] += loss.item()
                     _, predicted = outputs.max(1)
-                    if len(targets.shape) > 1:
-                        correct[key] += predicted.eq(targets.argmax(1)).sum().item()
-                    else:
-                        correct[key] += predicted.eq(targets).sum().item()
+                    correct[key] += predicted.eq(targets.argmax(1)).sum().item()
+                    # Compute ML accuracy
+                    ml_preds = self.ml_model.compute_advml(inputs, x_adv, snr_ml)
+                    ml_correct[key] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
         log_dict = {f'test.{key}_acc': 100.*correct[key]/total for key in slow_atks}
-        log_dict.update({f'test.{key}_loss': test_loss[key]/(batch_idx+1) for key in slow_atks})
+        log_dict.update({f'test.{key}_acc_ml': 100.*ml_correct[key]/total for key in slow_atks})
         wandb.log(log_dict, commit=False)
         wandb.log({
-            'test.acc': 100.*correct['clean']/total, 'test.loss': test_loss['clean']/(batch_idx+1),
+            'test.acc': 100.*correct['clean']/total, 'test.acc_ml': 100.*ml_correct['clean']/total,
             'lr': self.scheduler.get_last_lr()[0], 'epoch': epoch})
 
     def test(self):
@@ -130,48 +130,79 @@ class Trainer(abc.ABC):
             os.makedirs(res_path)
         
         self.net.eval()
-        test_loss = {'clean': 0}
-        res = {'true': [], 'clean': [], 'snr': []}
+        res = {'true': [], 'clean': [], 'clean_ml': [], 'snr': []}
         total = 0
-        slow_atks = self.get_test_attacks()
-        for key in slow_atks:
-            test_loss[key] = 0
+        atks = self.get_test_attacks()
+        for key in atks:
             res[key] = []
+            res[f'{key}_ml'] = []
+        res['cs_ml'] = self.get_cosine_similarity_ml()
         with torch.no_grad():
-            for batch_idx, batch in enumerate(tqdm(self.test_dl)):
+            for batch in tqdm(self.test_dl):
                 inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
+                snr = batch['snr'].to(self.device)
+                snr_ml = batch['snr_filt'].to(self.device)
                 outputs = self.net(inputs)
-                loss = F.cross_entropy(outputs, targets)
-                test_loss['clean'] += loss.item()
                 predicted = outputs.argmax(1)
+                ml_preds = self.ml_model.compute_ml(inputs, snr_ml)
                 total += targets.size(0)
-                if len(targets.shape) > 1:
-                    res['true'].extend(batch['y'].argmax(1).numpy())
-                else:
-                    res['true'].extend(batch['y'].numpy())
+                res['true'].extend(batch['y'].argmax(1).numpy())
                 res['clean'].extend(predicted.cpu().numpy())
+                res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
                 res['snr'].extend(batch['snr'].numpy())
 
-                for key, atk in slow_atks.items():
+                for key, atk in atks.items():
                     with torch.enable_grad():
-                        x_adv = atk(inputs, targets)
+                        x_adv = atk(inputs, targets, snr)
                     outputs = self.net(x_adv)
-                    loss = F.cross_entropy(outputs, targets)
-                    test_loss[key] += loss.item()
-                    _, predicted = outputs.max(1)
+                    predicted = outputs.argmax(1)
+                    ml_preds = self.ml_model.compute_advml(inputs, x_adv, snr_ml)
                     res[key].extend(predicted.cpu().numpy())
+                    res[f'{key}_ml'].extend(ml_preds.argmax(1).cpu().numpy())
         for key, value in res.items():
             res[key] = np.array(value)
         df = pd.DataFrame(res)
-        df['acc'] = df['true']==df['clean']
-        df_snr = df.groupby('snr', as_index=False)['acc'].mean().sort_values('snr')
-        fig = plot_acc_vs_snr(df_snr.acc, df_snr.snr, title="Accuracy vs SNR")
-        fig.savefig(os.path.join(res_path, "acc_vs_snr.png"))
-        log_dict = {f'test.{key}_acc': 100.*(df['true']==df[key]).mean() for key in slow_atks}
-        log_dict.update({f'test.{key}_loss': test_loss[key]/(batch_idx+1) for key in slow_atks})
-        wandb.log(log_dict, commit=False)
-        wandb.log({
-            'test.acc': 100.*df.acc.mean(), 'test.loss': test_loss['clean']/(batch_idx+1)})
+        get_acc_metrics(df)
+        for key in atks:
+            get_acc_metrics(df, key)
+        wandb.log({'cosine_similarity': df['cs_ml'].mean()})
+    
+    def get_cosine_similarity_ml(self):
+        """
+        Compute the cosine similarity between the model and the ML model adversarial attacks.
+        """
+        res = []
+
+        class ReducedModel(nn.Module):
+            def __init__(self, model):
+                super(ReducedModel, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                return self.model(x)[:, :14]
+        
+        model = ReducedModel(self.net)
+        ml_model = self.ml_model.return_ml_model()
+
+        atk = SPR_Attack(PGD(model, steps=7), 20, 0.25)
+        for batch in tqdm(self.test_dl):
+            targets = batch['y'].to(self.device)
+            mask = targets.argmax(dim=-1) < 14
+            targets = targets[mask, :14]
+            if targets.shape[0] == 0:
+                continue
+            inputs = batch['x'].to(self.device)[mask]
+            snr = batch['snr'].to(self.device)[mask]
+            snr_ml = batch['snr_filt'].to(self.device)[mask]
+            ml_model.snr = snr_ml
+            atk_ml = SPR_Attack(PGD(ml_model, steps=7), 20, 0.25)
+            x_adv = atk(inputs, targets, snr)
+            x_adv_ml = atk_ml(inputs, targets, snr)
+            d_model = (x_adv - inputs).view(x_adv.size(0), -1)
+            d_ml = (x_adv_ml - inputs).view(x_adv_ml.size(0), -1)
+            cs_ml = torch.cosine_similarity(d_model, d_ml, dim=1).cpu().numpy()
+            res.extend(cs_ml)
+        return res
     
     def save_ckpt(self, epoch):
         # Save checkpoint.

@@ -1,4 +1,6 @@
 from foolbox import Attack
+from numpy import dtype
+import torch
 from kdmc.attack.pgd import PGD
 from kdmc.utils import FFloat
 
@@ -22,7 +24,7 @@ class SPR_Attack:
         self.r_alpha = r_alpha
 
     def __call__(self, x, y, snr=None):
-        noise_factor = 0 if snr is None else (1 / 10.0 ** (snr / 10.0))
+        noise_factor = 0 if snr is None else (1 / 10.0 ** (snr.to(dtype=torch.float32) / 10.0))
         signal_sample_energy = (x ** 2).sum(-2).mean(-1) / (1 + noise_factor)
         epsilon = ((signal_sample_energy / 2.0) / 10.0 ** (self.spr / 10.0)) ** 0.5
         self.atk.eps = epsilon.view(-1, 1, 1)
