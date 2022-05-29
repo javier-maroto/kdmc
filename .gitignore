@@ -139,3 +139,4 @@ wandb
 data/*
 checkpoint
 results
+profiler

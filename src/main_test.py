@@ -5,7 +5,7 @@ import wandb
 from kdmc.data.core import create_dataloaders, get_datasets
 
 from kdmc.parser import parse_args
-from kdmc.train.core import create_model, create_scheduler, get_trainer
+from kdmc.train.core import create_model, get_trainer
 
 
 def main():

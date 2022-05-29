@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 class STDTrainer(Trainer):
-    def train(self, epoch):
+    def train(self, epoch, profiler=None):
         print('\nEpoch: %d' % epoch)
         self.net.train()
         train_loss = 0
@@ -22,14 +22,13 @@ class STDTrainer(Trainer):
             self.optimizer.step()
             if self.sch_updt == 'step':
                 self.scheduler.step()
+            if profiler is not None:
+                profiler.step()
 
             train_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            if len(targets.shape) > 1:
-                correct += predicted.eq(targets.argmax(1)).sum().item()
-            else:
-                correct += predicted.eq(targets).sum().item()
+            correct += predicted.eq(targets.argmax(1)).sum().item()
 
         wandb.log({'train.acc': 100.*correct/total, 'train.loss': train_loss/(batch_idx+1), 'epoch': epoch})
 

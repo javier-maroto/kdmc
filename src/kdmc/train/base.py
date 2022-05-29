@@ -7,6 +7,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.profiler as tpf
 from tqdm import tqdm
 import wandb
 import torch.nn.functional as F
@@ -15,7 +16,7 @@ from kdmc.attack.core import SPR_Attack
 from kdmc.attack.pgd import PGD
 from kdmc.model.max_likelihood import MaxLikelihoodModel
 from kdmc.plot import plot_acc_vs_snr
-from kdmc.train.testing import get_acc_metrics, get_cosine_similarity_ml
+from kdmc.train.testing import get_acc_metrics, measure_cosine_similarity, measure_margins
 
 
 class Trainer(abc.ABC):
@@ -34,9 +35,15 @@ class Trainer(abc.ABC):
         self.slow_rate = slow_rate
         self.device = args.device
         self.save_inter = args.save_inter
-        self.ml_model = MaxLikelihoodModel(
-            f'{args.root_path}/data/synthetic/signal/states', device=self.device)
+        self.root_path = args.root_path
+        self.data_path = args.data_path
+        states_path = self.data_path.joinpath('synthetic/signal/states')
+        self.ml_model = MaxLikelihoodModel(states_path, device=self.device)
         self.ml_model.create_filter()
+        # Gradient clipping
+        if args.grad_clip is not None:
+            for p in self.net.parameters():
+                p.register_hook(lambda grad: torch.clamp(grad, -args.grad_clip, args.grad_clip))
 
     def loop_fast(self, epoch):
         self.train(epoch)
@@ -136,7 +143,7 @@ class Trainer(abc.ABC):
         for key in atks:
             res[key] = []
             res[f'{key}_ml'] = []
-        res['cs_ml'] = self.get_cosine_similarity_ml()
+        #res.update(self.get_geometric_metrics())
         with torch.no_grad():
             for batch in tqdm(self.test_dl):
                 inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
@@ -165,26 +172,19 @@ class Trainer(abc.ABC):
         get_acc_metrics(df)
         for key in atks:
             get_acc_metrics(df, key)
-        wandb.log({'cosine_similarity': df['cs_ml'].mean()})
+            """
+        wandb.log({
+            'cosine_similarity': df['cs_ml'].mean(), 
+            'margin_nn': df['df_nn'].mean(),
+            'margin_ml': df['df_ml'].mean(),
+            'margin_nn_towards_ml_margin': df['df_nn_ml'].mean(),
+            'margin_ml_towards_nn_margin': df['df_ml_nn'].mean()})"""
+        return res
     
-    def get_cosine_similarity_ml(self):
-        """
-        Compute the cosine similarity between the model and the ML model adversarial attacks.
-        """
-        res = []
+    def get_geometric_metrics(self):
+        model, ml_model = self.create_reduced_models()
+        res = {'cs_ml': [], 'df_nn': [], 'df_ml': [], 'df_nn_ml': [], 'df_ml_nn': []}
 
-        class ReducedModel(nn.Module):
-            def __init__(self, model):
-                super(ReducedModel, self).__init__()
-                self.model = model
-
-            def forward(self, x):
-                return self.model(x)[:, :14]
-        
-        model = ReducedModel(self.net)
-        ml_model = self.ml_model.return_ml_model()
-
-        atk = SPR_Attack(PGD(model, steps=7), 20, 0.25)
         for batch in tqdm(self.test_dl):
             targets = batch['y'].to(self.device)
             mask = targets.argmax(dim=-1) < 14
@@ -195,15 +195,31 @@ class Trainer(abc.ABC):
             snr = batch['snr'].to(self.device)[mask]
             snr_ml = batch['snr_filt'].to(self.device)[mask]
             ml_model.snr = snr_ml
-            atk_ml = SPR_Attack(PGD(ml_model, steps=7), 20, 0.25)
-            x_adv = atk(inputs, targets, snr)
-            x_adv_ml = atk_ml(inputs, targets, snr)
-            d_model = (x_adv - inputs).view(x_adv.size(0), -1)
-            d_ml = (x_adv_ml - inputs).view(x_adv_ml.size(0), -1)
-            cs_ml = torch.cosine_similarity(d_model, d_ml, dim=1).cpu().numpy()
-            res.extend(cs_ml)
+            cs_ml = measure_cosine_similarity(model, ml_model, inputs, targets, snr)
+            d1, d2, d12, d21 = measure_margins(model, ml_model, inputs)
+            res['cs_ml'].extend(cs_ml.cpu().numpy())
+            res['df_nn'].extend(d1.cpu().numpy())
+            res['df_ml'].extend(d2.cpu().numpy())
+            res['df_nn_ml'].extend(d12.cpu().numpy())
+            res['df_ml_nn'].extend(d21.cpu().numpy())
         return res
     
+    def create_reduced_models(self):
+        """
+        Create a reduced model that takes only the first 14 classes, and the ML model.
+        """
+        class ReducedModel(nn.Module):
+            def __init__(self, model):
+                super(ReducedModel, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                return self.model(x)[:, :14]
+                
+        model = ReducedModel(self.net)
+        ml_model = self.ml_model.return_ml_model()
+        return model, ml_model
+
     def save_ckpt(self, epoch):
         # Save checkpoint.
         print('Saving..')
@@ -215,13 +231,14 @@ class Trainer(abc.ABC):
             'sched': self.scheduler.state_dict(),
             'epoch': epoch,
         }
-        base_path = f'checkpoint/{self.dataset}/{self.arch}/{self.id}/{self.seed}'
+        base_path = self.root_path.joinpath(
+            f'checkpoint/{self.dataset}/{self.arch}/{self.id}/{self.seed}')
         if not os.path.isdir(base_path):
             os.makedirs(base_path, exist_ok=True)
         if self.save_inter:
-            torch.save(state, f'{base_path}/{epoch}.pth')
+            torch.save(state, base_path.joinpath(f'{epoch}.pth'))
         else:
-            torch.save(state, f'{base_path}/ckpt_last.pth')
+            torch.save(state, base_path.joinpath(f'ckpt_last.pth'))
 
     def get_val_attacks(self):
         return {

@@ -1,5 +1,3 @@
-from foolbox import Attack
-from numpy import dtype
 import torch
 from kdmc.attack.pgd import PGD
 from kdmc.utils import FFloat

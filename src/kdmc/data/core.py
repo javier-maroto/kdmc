@@ -1,4 +1,5 @@
-from torch.utils.data import DataLoader
+import numpy as np
+from torch.utils.data import DataLoader, Subset
 
 from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 from kdmc.data.s1024 import get_s1024_datasets
@@ -32,6 +33,11 @@ def get_input_dims(args):
 
 
 def create_dataloaders(args, trainset, testset, num_workers=0):
+    if args.n_batches != -1:
+        if args.n_batches * args.batch_size > len(trainset):
+            raise ValueError(f"n_batches * batch_size > len(trainset)")
+        trainset = Subset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
+        testset = Subset(testset, np.random.choice(len(testset), args.n_batches * args.batch_size, replace=False))
     trainloader = DataLoader(
         trainset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     testloader = DataLoader(

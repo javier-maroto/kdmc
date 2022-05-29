@@ -216,8 +216,6 @@ class MaxLikelihoodModel:
                     likelihood_sample = torch.logsumexp(-distances / (2 * sigma.view(-1, 1, 1) ** 2), dim=-1) + Ks + Km
                     likelihood[:, j] = torch.sum(likelihood_sample, dim=-1)
                 ml_preds = F.softmax(likelihood, dim=-1)
-                print(ml_preds.shape)
-                print(ml_preds)
                 return ml_preds
         
         return MLModel(self, snr)

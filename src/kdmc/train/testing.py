@@ -4,6 +4,7 @@ from tqdm import tqdm
 import wandb
 
 from kdmc.attack.core import SPR_Attack
+from kdmc.attack.deepfool import DeepFool
 from kdmc.attack.pgd import PGD
 
 
@@ -28,46 +29,28 @@ def get_acc_metrics(df, atk_key=None):
         f"test.{label}acc_ml": 100 * temp['acc_ml'].mean(),
         f"test.{label}acc_snr": wandb.plot.line(table, "snr", "acc", title=f"Accuracy vs SNR ({label})"),
         f"test.{label}acc_ml_snr": wandb.plot.line(table, "snr", "acc_ml", title=f"Accuracy vs SNR ({label})"),
-        }, commit=False)
+        })
 
 
-def get_cosine_similarity_ml(trainer):
-    """
-    Compute the cosine similarity between the model and the ML model adversarial attacks.
-    """
-    res = []
+def measure_cosine_similarity(net1, net2, x, y, snr):
+    atk1 = SPR_Attack(PGD(net1, steps=7), 20, 0.25)
+    atk2 = SPR_Attack(PGD(net2, steps=7), 20, 0.25)
+    x2 = atk2(x, y, snr)
+    x1 = atk1(x, y, snr)
+    d1 = (x1 - x).view(x1.size(0), -1)
+    d2 = (x2 - x).view(x2.size(0), -1)
+    return torch.cosine_similarity(d1, d2, dim=1)
 
-    def new_forward(model, x):
-        return model(x)[:14]
-    model = trainer.net
-    model.forward = partial(new_forward, model)
-    ml_model = trainer.ml_model.return_ml_model()
 
-    atk = SPR_Attack(PGD(model, steps=7), 20, 0.25)
-    for batch in tqdm(trainer.test_dl):
-        targets = batch['y'].to(trainer.device)
-        mask = targets.argmax(dim=-1) < 14
-        print(mask.sum())
-        targets = targets[mask, :14]
-        print(targets.shape)
-        if targets.shape[0] == 0:
-            print('escape')
-            continue
-        inputs = batch['x'].to(trainer.device)[mask]
-        snr = batch['snr'].to(trainer.device)[mask]
-        snr_ml = batch['snr_filt'].to(trainer.device)[mask]
-        print(inputs.shape)
-        ml_model.snr = snr_ml
-        atk_ml = SPR_Attack(PGD(ml_model, steps=7), 20, 0.25)
-        x_adv = atk(inputs, targets, snr)
-        print(x_adv.shape)
-        x_adv_ml = atk_ml(inputs, targets, snr)
-        print(x_adv_ml.shape)
-        d_model = (x_adv - inputs).view(x_adv.size(0), -1)
-        d_ml = (x_adv_ml - inputs).view(x_adv_ml.size(0), -1)
-        print(d_ml.shape)
-        cs_ml = torch.cosine_similarity(d_model, d_ml, dim=1).cpu().numpy()
-        res.extend(cs_ml)
-        print(res)
-    return res
-    
+def measure_margins(net, mlnet, x, crosslimit=10):
+    atk1 = DeepFool(net, num_classes=14, max_iter=20, overshoot=0.02, refinement_steps=10, device='cuda')
+    atk2 = DeepFool(mlnet, num_classes=14, max_iter=20, overshoot=0.02, refinement_steps=10, device='cuda')
+    d1 = atk1(x).detach()
+    d1 = torch.sqrt((d1 ** 2).sum(-2)).mean(-1)
+    d2 = atk2(x).detach()
+    d2 = torch.sqrt((d2 ** 2).sum(-2)).mean(-1)
+    d12 = atk2.refine(x, crosslimit * d1).detach()
+    d12 = torch.sqrt((d12 ** 2).sum(-2)).mean(-1)
+    d21 = atk1.refine(x, crosslimit * d2).detach()
+    d21 = torch.sqrt((d21 ** 2).sum(-2)).mean(-1)
+    return d1, d2, d12, d21
