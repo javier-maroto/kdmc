@@ -15,7 +15,7 @@ def main():
 
     args = parse_args()
 
-    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=args.root_path.joinpath("wandb"))
+    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=args.root_path)
     wandb.config.update(args)
 
     # Seed
@@ -46,7 +46,6 @@ def main():
                 on_trace_ready=tpf.tensorboard_trace_handler(dir_name=args.root_path.joinpath('profiler')),
                 record_shapes=True,  # record shapes of operator inputs
                 profile_memory=True,  # record tensor memory allocation
-                with_stack=True  # record stack traces of where ops are created
             ) as prof:
             trainer.train(start_epoch, profiler=prof)
         return

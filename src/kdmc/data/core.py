@@ -32,14 +32,13 @@ def get_input_dims(args):
     pass
 
 
-def create_dataloaders(args, trainset, testset, num_workers=0):
+def create_dataloaders(args, trainset, testset):
     if args.n_batches != -1:
         if args.n_batches * args.batch_size > len(trainset):
             raise ValueError(f"n_batches * batch_size > len(trainset)")
         trainset = Subset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
-        testset = Subset(testset, np.random.choice(len(testset), args.n_batches * args.batch_size, replace=False))
     trainloader = DataLoader(
-        trainset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
+        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True)
     testloader = DataLoader(
-        testset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
+        testset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers, pin_memory=True)
     return trainloader, testloader
