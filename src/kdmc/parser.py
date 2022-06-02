@@ -31,7 +31,7 @@ def parse_args(args=None):
     # Parameters for adversarial training
     parser.add_argument('--atk', nargs="+", default=['pgd', 'Linf', '20', '0.25', '7'], type=str, help='Attack (name, **kwargs)')
     # Parameters for data
-    parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf'], help='Dataset used')
+    parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn'], help='Dataset used')
     parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
     parser.add_argument('--n_workers', default=4, type=int, help='Number of dataloader workers')
@@ -49,6 +49,8 @@ def parse_args(args=None):
     # If None, data is in the same root folder
     if args.data_path is None:
         args.data_path = args.root_path / 'data'
+    else:
+        args.data_path = Path(args.data_path)
     # Check only 10 batches when profiling
     if args.profile:
         args.n_batches = 10

@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchaudio.functional.filtering import lfilter
 import scipy.io
 import os
 

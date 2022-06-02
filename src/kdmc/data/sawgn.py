@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, Subset
 
 
-def get_sbasic_datasets(path, time_samples=None, seed=0):
+def get_sawgn_datasets(path, time_samples=None, seed=0):
 
     full = SBasic(path, time_samples)
     full_test = SBasic(path, time_samples)
@@ -40,12 +40,11 @@ class SBasic(Dataset):
         "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM"
     )
     time_samples = 1024
-    filename = "sbasic.npz"
-    filename_big = "sbasic_big.npz" 
+    filename = "sawgn.npz"
 
     def __init__(self, raw_path, time_samples=None):
         super().__init__()
-        self.data_path = os.path.join(raw_path, self.folder)
+        self.data_path = raw_path.joinpath(self.folder)
         if time_samples is not None:
             if time_samples > self.time_samples:
                 print(
@@ -55,7 +54,7 @@ class SBasic(Dataset):
             else:
                 self.time_samples = time_samples
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
-        if not os.path.isfile(os.path.join(self.data_path, self.filename)):
+        if not os.path.isfile(self.data_path.joinpath(self.filename)):
             self.create_dataset()
         self.iq, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs = self.load()
         self.len = self.iq.shape[0]
@@ -69,7 +68,7 @@ class SBasic(Dataset):
 
     def create_dataset(self):
         paths = []
-        for _, _, files in os.walk(os.path.join(self.data_path, "rx_x")):
+        for _, _, files in os.walk(self.data_path.joinpath("rx_x")):
             for file in files:
                 if file.endswith(".mat"):
                     paths.append(file)
@@ -83,38 +82,45 @@ class SBasic(Dataset):
         df_path['snr'] = df_path['snr'].astype(float)
         
         basic_paths = df_path.loc[
-            (df_path.sps == 8) & (df_path.channel == 'AWGN') &
-            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
+            (df_path.channel == 'AWGN') &
             df_path.modulation.isin(self.classes), 'path'].values
-
+        print(df_path.loc[
+            (df_path.channel == 'AWGN') &
+            df_path.modulation.isin(self.classes), ['fs','sps','rolloff']].drop_duplicates())
         modulation = []
         rx_x = []
         y = []
         snr = []
-        rx_s, tx_s, yml_est, yml_nf = [], [], [], []
+        rx_s, tx_s, sps_list, rolloff_list, fs_list = [], [], [], [], []
         for path in tqdm(basic_paths):
             # Load iq data
-            data = scipy.io.loadmat(os.path.join(self.data_path, "rx_x", path))["rx_x"]
+            data = scipy.io.loadmat(self.data_path.joinpath("rx_x", path))["rx_x"]
             data = data[...,:self.time_samples]
             data = np.stack([data.real, data.imag], axis=1)
             rx_x.append(data.astype(np.float32))
             # Load modulation
             mod = df_path.loc[df_path.path == path, 'modulation'].values[0]
             modulation.append(np.full(data.shape[0], self.class_to_idx[mod]))
-            y.append(scipy.io.loadmat(os.path.join(self.data_path, "y", path))['y'])
+            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'])
+            # Load sps
+            sps = df_path.loc[df_path.path == path, 'sps'].values[0]
+            sps_list.append(np.full(data.shape[0], sps))
+            # Load rolloff
+            rolloff = df_path.loc[df_path.path == path, 'rolloff'].values[0]
+            rolloff_list.append(np.full(data.shape[0], rolloff))
+            # Load fs
+            fs = df_path.loc[df_path.path == path, 'fs'].values[0]
+            fs_list.append(np.full(data.shape[0], fs))
             # Load snr
             snr_i = df_path.loc[df_path.path == path, 'snr'].values[0]
             snr.append(np.full(data.shape[0], snr_i))
             # Load rx_s and tx_s
-            data = scipy.io.loadmat(os.path.join(self.data_path, "rx_s", path))["rx_s"]
+            data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"]
             data = np.stack([data.real, data.imag], axis=1)
             rx_s.append(data.astype(np.float32))
-            data = scipy.io.loadmat(os.path.join(self.data_path, "tx_s", path))["tx_s"]
+            data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"]
             data = np.stack([data.real, data.imag], axis=1)
             tx_s.append(data.astype(np.float32))
-            # Load yml_est and yml_nf
-            yml_est.append(scipy.io.loadmat(os.path.join(self.data_path, "yml_est", path))['yml_est'])
-            yml_nf.append(scipy.io.loadmat(os.path.join(self.data_path, "yml_nf", path))['yml_nf'])
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
@@ -122,31 +128,28 @@ class SBasic(Dataset):
         y = np.concatenate(y, axis=0, dtype=np.float32)
         rx_s = np.concatenate(rx_s, axis=0)
         tx_s = np.concatenate(tx_s, axis=0)
-        yml_est = np.concatenate(yml_est, axis=0)
-        yml_nf = np.concatenate(yml_nf, axis=0)
+        sps = np.concatenate(sps_list, axis=0)
+        rolloff = np.concatenate(rolloff_list, axis=0)
+        fs = np.concatenate(fs_list, axis=0)
 
         snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
         
         np.savez(
-            os.path.join(self.data_path, self.filename),
-            iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt)
-
-        np.savez(
-            os.path.join(self.data_path, self.filename_big),
-            iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt, rx_s=rx_s, tx_s=tx_s,
-            yml_est=yml_est, yml_nf=yml_nf)
+            self.data_path.joinpath(self.filename),
+            iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt,
+            sps=sps, rolloff=rolloff, fs=fs)
 
     def load(self):
         """Returns the pytables arrays for the iq signals, modulations and snrs"""
-        data = np.load(os.path.join(self.data_path, self.filename))
+        data = np.load(self.data_path.joinpath(self.filename))
         iq = data['iq']
         modulation = data['modulation']
         y = data['y']
         snr = data['snr']
         snr_filt = data['snr_filt']
-        sps = np.full(iq.shape[0], 8)
-        fs = np.full(iq.shape[0], 2e5)
-        rolloff = np.full(iq.shape[0], 0.35)
+        sps = data['sps']
+        rolloff = data['rolloff']
+        fs = data['fs']
         
         return iq, modulation, y, snr, snr_filt, sps, rolloff, fs
 
