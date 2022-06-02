@@ -32,12 +32,12 @@ def parse_args(args=None):
     parser.add_argument('--atk', nargs="+", default=['pgd', 'Linf', '20', '0.25', '7'], type=str, help='Attack (name, **kwargs)')
     # Parameters for data
     parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn'], help='Dataset used')
-    parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=1024, type=int, help='Batch size')
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
     parser.add_argument('--n_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('--time_samples', type=int, help='Number of time samples of the IQ signal')
     parser.add_argument('--return_ml', action='store_true', help='Return the maximum likelihood')
-    # Parameters for AKD
+    # Parameters for AKD and self distillation
     parser.add_argument('--kt_path', nargs="+", help='path of the stored models')
     parser.add_argument('--kt_alpha', type=float, help='Mixing rate (1.0 = only use kt preds)')
     parser.add_argument('--kt_beta', nargs="+", default=[], type=float, help='Mixing rate between the kt models (by default it mixes uniformly))')
