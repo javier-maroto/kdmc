@@ -22,7 +22,7 @@ def parse_args(args=None):
     parser.add_argument('--grad_clip', default=5, type=float, help='Gradient clipping')
     # Parameters for scheduler
     parser.add_argument('--sched', default='exp', choices=['1cyl', 'exp', 'fixed'], help='scheduler')
-    parser.add_argument('--sch_gamma', default=0.9, type=float, help='Gamma for exponential lr')
+    parser.add_argument('--sch_gamma', default=0.95, type=float, help='Gamma for exponential lr')
     # Parameters for validation
     parser.add_argument('--save_inter', action='store_true', help='save intermediate models (useful for kt intermediate models)')
     parser.add_argument('--save_freq', default=5, type=int, help='Save frequency (epochs)')
@@ -32,7 +32,7 @@ def parse_args(args=None):
     parser.add_argument('--atk', nargs="+", default=['pgd', 'Linf', '20', '0.25', '7'], type=str, help='Attack (name, **kwargs)')
     # Parameters for data
     parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn'], help='Dataset used')
-    parser.add_argument('--batch_size', default=1024, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
     parser.add_argument('--n_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('--time_samples', type=int, help='Number of time samples of the IQ signal')

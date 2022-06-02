@@ -81,17 +81,17 @@ class SBasic(Dataset):
         df_path['rolloff'] = df_path['rolloff'].astype(float)
         df_path['snr'] = df_path['snr'].astype(float)
         
-        basic_paths = df_path.loc[
+        df_filt = df_path.loc[
             (df_path.channel == 'AWGN') &
-            df_path.modulation.isin(self.classes), 'path'].values
-        print(df_path.loc[
-            (df_path.channel == 'AWGN') &
-            df_path.modulation.isin(self.classes), ['fs','sps','rolloff']].drop_duplicates())
+            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
+            df_path.modulation.isin(self.classes)]
+        basic_paths = df_filt['path'].values
+        print(df_filt[['fs','sps','rolloff']].drop_duplicates())
         modulation = []
         rx_x = []
         y = []
         snr = []
-        rx_s, tx_s, sps_list, rolloff_list, fs_list = [], [], [], [], []
+        snr_filt, sps_list, rolloff_list, fs_list = [], [], [], []
         for path in tqdm(basic_paths):
             # Load iq data
             data = scipy.io.loadmat(self.data_path.joinpath("rx_x", path))["rx_x"]
@@ -117,22 +117,20 @@ class SBasic(Dataset):
             # Load rx_s and tx_s
             data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"]
             data = np.stack([data.real, data.imag], axis=1)
-            rx_s.append(data.astype(np.float32))
+            rx_s = data.astype(np.float32)
             data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"]
             data = np.stack([data.real, data.imag], axis=1)
-            tx_s.append(data.astype(np.float32))
+            tx_s = data.astype(np.float32)
+            snr_filt.append(self.compute_snr(tx_s, rx_s - tx_s))
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
         rx_x = np.concatenate(rx_x, axis=0)
         y = np.concatenate(y, axis=0, dtype=np.float32)
-        rx_s = np.concatenate(rx_s, axis=0)
-        tx_s = np.concatenate(tx_s, axis=0)
         sps = np.concatenate(sps_list, axis=0)
         rolloff = np.concatenate(rolloff_list, axis=0)
         fs = np.concatenate(fs_list, axis=0)
-
-        snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
+        snr_filt = np.concatenate(snr_filt, axis=0)
         
         np.savez(
             self.data_path.joinpath(self.filename),
