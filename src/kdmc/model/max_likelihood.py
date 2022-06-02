@@ -84,7 +84,7 @@ class MaxLikelihoodModel:
                             (np.pi*t*(1-(4*rolloff*t/Ls)*(4*rolloff*t/Ls))/Ls)
             
             h /= np.sum(h)
-            self.h = torch.from_numpy(h)
+            self.h = torch.from_numpy(h).to(self.device, dtype=torch.float32)
         self.h = self.h.view(1,1,-1).repeat(2,1,1)
 
     def filter_signal(self, x):

@@ -37,50 +37,51 @@ class Trainer(abc.ABC):
         self.root_path = args.root_path
         self.data_path = args.data_path
         
-        self.ml_preds = self.get_ml_preds(self.train_dl, self.test_dl)
+        self.ml_preds = torch.zeros(
+            [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
+            device=self.device)
+        self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
         # Gradient clipping
         if args.grad_clip is not None:
             for p in self.net.parameters():
                 p.register_hook(lambda grad: torch.clamp(grad, -args.grad_clip, args.grad_clip))
 
-    def get_ml_preds(self, train_dl, test_dl):
+    def get_ml_preds(self, dl, ml_preds):
         states_path = self.data_path.joinpath('synthetic/signal/states')
         ml_model = MaxLikelihoodModel(states_path, device=self.device)
-        ml_preds = torch.zeros([len(train_dl.dataset) + len(test_dl.dataset), get_num_classes(self.dataset)], device=self.device)
         print('Computing ML predictions')
-        for dl in (train_dl, test_dl):
-            for batch in tqdm(dl):
-                sps = batch['sps'].to(self.device)
-                rolloff = batch['rolloff'].to(self.device)
-                for a in sps.unique():
-                    for b in rolloff.unique():
-                        mask = (sps == a) & (rolloff == b)
-                        if mask.sum() == 0:
-                            continue
-                        x = batch['x'][mask].to(self.device)
-                        snr_ml = batch['snr_filt'][mask].to(self.device)
-                        y = batch['y'][mask].to(self.device)
-                        idx = batch['idx'][mask].to(self.device, dtype=torch.long)
-                        ml_model.create_filter(Ls=a, rolloff=b)
-                        ml_preds_ = ml_model.compute_ml(x, snr_ml)
-                        ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
-                        ml_preds[idx] = ml_preds_
+        for batch in tqdm(dl):
+            sps = batch['sps']
+            rolloff = batch['rolloff']
+            for a in sps.unique():
+                for b in rolloff.unique():
+                    mask = ((sps == a) & (rolloff == b)).to(self.device)
+                    if mask.sum() == 0:
+                        continue
+                    x = batch['x'][mask].to(self.device)
+                    snr_ml = batch['snr_filt'][mask].to(self.device)
+                    y = batch['y'][mask].to(self.device)
+                    idx = batch['idx'][mask].to(self.device, dtype=torch.long)
+                    ml_model.create_filter(Ls=a.numpy().astype(np.int), rolloff=b.numpy())
+                    ml_preds_ = ml_model.compute_ml(x, snr_ml)
+                    ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
+                    ml_preds[idx] = ml_preds_
         return ml_preds
 
     def get_adv_ml_preds(self, batch, x_adv):
         ml_model = MaxLikelihoodModel(self.data_path.joinpath('synthetic/signal/states'), device=self.device)
-        sps = batch['sps'].to(self.device)
-        rolloff = batch['rolloff'].to(self.device)
+        sps = batch['sps']
+        rolloff = batch['rolloff']
         ml_preds = torch.zeros([x_adv.shape[0], get_num_classes(self.dataset)], device=self.device)
         for a in sps.unique():
             for b in rolloff.unique():
-                mask = (sps == a) & (rolloff == b)
+                mask = ((sps == a) & (rolloff == b)).to(self.device)
                 if mask.sum() == 0:
                     continue
                 x = batch['x'][mask].to(self.device)
                 snr_ml = batch['snr_filt'][mask].to(self.device)
                 y = batch['y'][mask].to(self.device)
-                ml_model.create_filter(Ls=a, rolloff=b)
+                ml_model.create_filter(Ls=a.numpy().astype(np.int), rolloff=b.numpy())
                 ml_preds_ = ml_model.compute_advml(x, x_adv[mask], snr_ml)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                 ml_preds[mask] = ml_preds_
