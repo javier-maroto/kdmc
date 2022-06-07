@@ -102,13 +102,15 @@ class SBasic(Dataset):
             # Load iq data
             data = scipy.io.loadmat(self.data_path.joinpath("rx_x", path))["rx_x"]
             n_signals = data.shape[0] // n_params  # Normalize to compare with other datasets
-            data = data[np.random.choice(data.shape[0], n_signals, replace=False), :self.time_samples]
+            idxs = np.random.choice(data.shape[0], n_signals, replace=False)
+            data = data[idxs, :self.time_samples]
+            assert data.shape[0] == n_signals, (data.shape, n_signals)
             data = np.stack([data.real, data.imag], axis=1)
             rx_x.append(data.astype(np.float32))
             # Load modulation
             mod = df_path.loc[df_path.path == path, 'modulation'].values[0]
             modulation.append(np.full(data.shape[0], self.class_to_idx[mod]))
-            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'])
+            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs])
             # Load sps
             sps = df_path.loc[df_path.path == path, 'sps'].values[0]
             sps_list.append(np.full(data.shape[0], sps))
@@ -125,13 +127,14 @@ class SBasic(Dataset):
                 snr_filt.append(np.full(data.shape[0], np.nan))
             else:
                 # Load rx_s and tx_s
-                data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"]
+                data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"][idxs]
                 data = np.stack([data.real, data.imag], axis=1)
                 rx_s = data.astype(np.float32)
-                data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"]
+                data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"][idxs]
                 data = np.stack([data.real, data.imag], axis=1)
                 tx_s = data.astype(np.float32)
                 snr_filt.append(self.compute_snr(tx_s, rx_s - tx_s))
+            
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
