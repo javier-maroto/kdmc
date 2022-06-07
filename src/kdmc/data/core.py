@@ -5,6 +5,7 @@ from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 from kdmc.data.s1024 import get_s1024_datasets
 from kdmc.data.sbasic import get_sbasic_datasets
 from kdmc.data.sawgn import get_sawgn_datasets
+from kdmc.data.sawgn2p import get_sawgn2p_datasets
 
 
 def get_datasets(args):
@@ -18,6 +19,8 @@ def get_datasets(args):
         return get_sbasic_datasets(args.data_path, args.time_samples, args.seed, use_filters=False)
     elif args.dataset == 'sawgn':
         return get_sawgn_datasets(args.data_path, args.time_samples, args.seed)
+    elif args.dataset == 'sawgn2p':
+        return get_sawgn2p_datasets(args.data_path, args.time_samples, args.seed)
     else:
         raise NotImplementedError(f"dataset not implemented: {args.dataset}")
 
@@ -25,7 +28,7 @@ def get_datasets(args):
 def get_num_classes(dataset):
     if dataset == 'rml2016.10a':
         return 11
-    elif dataset in ('s1024', 'sbasic', 'sbasic_nf', 'sawgn'):
+    elif dataset in ('s1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p'):
         return 20
     else:
         raise NotImplementedError(f"dataset not implemented: {dataset}")
@@ -41,7 +44,7 @@ def create_dataloaders(args, trainset, testset):
             raise ValueError(f"n_batches * batch_size > len(trainset)")
         trainset = Subset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
     trainloader = DataLoader(
-        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True)
+        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
     testloader = DataLoader(
-        testset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers, pin_memory=True)
+        testset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
     return trainloader, testloader

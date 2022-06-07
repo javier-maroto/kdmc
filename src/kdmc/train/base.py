@@ -53,9 +53,10 @@ class Trainer(abc.ABC):
         for batch in tqdm(dl):
             sps = batch['sps']
             rolloff = batch['rolloff']
+            target_mask = batch['y'].argmax(dim=-1) < 14  # 0-13 are supported classes
             for a in sps.unique():
                 for b in rolloff.unique():
-                    mask = ((sps == a) & (rolloff == b)).to(self.device)
+                    mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
                     if mask.sum() == 0:
                         continue
                     x = batch['x'][mask].to(self.device)
@@ -66,16 +67,20 @@ class Trainer(abc.ABC):
                     ml_preds_ = ml_model.compute_ml(x, snr_ml)
                     ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                     ml_preds[idx] = ml_preds_
+            y = batch['y'][~target_mask].to(self.device)
+            idx = batch['idx'][~target_mask].to(self.device, dtype=torch.long)
+            ml_preds[idx] = y
         return ml_preds
 
     def get_adv_ml_preds(self, batch, x_adv):
         ml_model = MaxLikelihoodModel(self.data_path.joinpath('synthetic/signal/states'), device=self.device)
         sps = batch['sps']
         rolloff = batch['rolloff']
+        target_mask = batch['y'].argmax(dim=-1) < 14  # 0-13 are supported classes
         ml_preds = torch.zeros([x_adv.shape[0], get_num_classes(self.dataset)], device=self.device)
         for a in sps.unique():
             for b in rolloff.unique():
-                mask = ((sps == a) & (rolloff == b)).to(self.device)
+                mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
                 if mask.sum() == 0:
                     continue
                 x = batch['x'][mask].to(self.device)
@@ -85,6 +90,8 @@ class Trainer(abc.ABC):
                 ml_preds_ = ml_model.compute_advml(x, x_adv[mask], snr_ml)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                 ml_preds[mask] = ml_preds_
+        y = batch['y'][~target_mask].to(self.device)
+        ml_preds[~target_mask] = y
         return ml_preds
 
     def loop_fast(self, epoch):
