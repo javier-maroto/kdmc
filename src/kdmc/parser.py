@@ -34,7 +34,7 @@ def parse_args(args=None):
     parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p'], help='Dataset used')
     parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
-    parser.add_argument('--n_workers', default=4, type=int, help='Number of dataloader workers')
+    parser.add_argument('--n_workers', default=2, type=int, help='Number of dataloader workers')
     parser.add_argument('--time_samples', type=int, help='Number of time samples of the IQ signal')
     parser.add_argument('--return_ml', action='store_true', help='Return the maximum likelihood')
     # Parameters for AKD and self distillation

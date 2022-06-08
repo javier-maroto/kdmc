@@ -37,7 +37,8 @@ class SBasic(Dataset):
     classes = (
         "BPSK", "QPSK", "8-PSK",
         "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
-        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM"
+        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
+        'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
     )
     time_samples = 1024
     filename = "sawgn.npz"
@@ -67,6 +68,9 @@ class SBasic(Dataset):
         return 10 * np.log10(np.mean(signal ** 2, axis=(-1,-2)) / np.mean(noise ** 2, axis=(-1,-2)))
 
     def create_dataset(self):
+        # Set seed for reproducibility
+        np.random.seed(0)
+
         paths = []
         for _, _, files in os.walk(self.data_path.joinpath("rx_x")):
             for file in files:
@@ -85,6 +89,8 @@ class SBasic(Dataset):
             (df_path.channel == 'AWGN') &
             (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
             df_path.modulation.isin(self.classes)]
+        df_params = df_filt.groupby(['sps', 'rolloff']).count()
+        n_params = df_params.shape[0]
         basic_paths = df_filt['path'].values
         print(df_filt[['fs','sps','rolloff']].drop_duplicates())
         modulation = []
@@ -95,13 +101,16 @@ class SBasic(Dataset):
         for path in tqdm(basic_paths):
             # Load iq data
             data = scipy.io.loadmat(self.data_path.joinpath("rx_x", path))["rx_x"]
-            data = data[...,:self.time_samples]
+            n_signals = data.shape[0] // n_params  # Normalize to compare with other datasets
+            idxs = np.random.choice(data.shape[0], n_signals, replace=False)
+            data = data[idxs, :self.time_samples]
+            assert data.shape[0] == n_signals, (data.shape, n_signals)
             data = np.stack([data.real, data.imag], axis=1)
             rx_x.append(data.astype(np.float32))
             # Load modulation
             mod = df_path.loc[df_path.path == path, 'modulation'].values[0]
             modulation.append(np.full(data.shape[0], self.class_to_idx[mod]))
-            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'])
+            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs])
             # Load sps
             sps = df_path.loc[df_path.path == path, 'sps'].values[0]
             sps_list.append(np.full(data.shape[0], sps))
@@ -114,14 +123,17 @@ class SBasic(Dataset):
             # Load snr
             snr_i = df_path.loc[df_path.path == path, 'snr'].values[0]
             snr.append(np.full(data.shape[0], snr_i))
-            # Load rx_s and tx_s
-            data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"]
-            data = np.stack([data.real, data.imag], axis=1)
-            rx_s = data.astype(np.float32)
-            data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"]
-            data = np.stack([data.real, data.imag], axis=1)
-            tx_s = data.astype(np.float32)
-            snr_filt.append(self.compute_snr(tx_s, rx_s - tx_s))
+            if mod in ['GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM','OQPSK']:
+                snr_filt.append(np.full(data.shape[0], np.nan))
+            else:
+                # Load rx_s and tx_s
+                data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"][idxs]
+                data = np.stack([data.real, data.imag], axis=1)
+                rx_s = data.astype(np.float32)
+                data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"][idxs]
+                data = np.stack([data.real, data.imag], axis=1)
+                tx_s = data.astype(np.float32)
+                snr_filt.append(self.compute_snr(tx_s, rx_s - tx_s))
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
@@ -132,6 +144,8 @@ class SBasic(Dataset):
         fs = np.concatenate(fs_list, axis=0)
         snr_filt = np.concatenate(snr_filt, axis=0)
         
+        assert len(np.unique(modulation)) == 20, len(np.unique(modulation))
+        assert y.shape[0] == snr_filt.shape[0], (y.shape, snr_filt.shape)
         np.savez(
             self.data_path.joinpath(self.filename),
             iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt,
