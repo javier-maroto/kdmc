@@ -58,12 +58,10 @@ class MLATTrainer(Trainer):
         for batch_idx, batch in enumerate(tqdm(self.train_dl)):
             inputs, targets = batch['x'].to(self.device), batch['y'].to(self.device)
             snr = batch['snr'].to(self.device)
-            snr_ml = batch['snr_filt'].to(self.device)
             adv_inputs = self.atk(inputs, targets, snr)
             outputs = self.net(adv_inputs)
 
-            ml_preds = self.ml_model.compute_advml(inputs, adv_inputs, snr_ml)
-            ml_preds = self.ml_model.adapt_unsupported(ml_preds, targets)
+            ml_preds = self.get_adv_ml_preds(batch, adv_inputs)
             self.optimizer.zero_grad()
             loss = F.cross_entropy(outputs, ml_preds)
             loss.backward()
