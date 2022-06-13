@@ -16,7 +16,7 @@ def parse_args(args=None):
     parser.add_argument('--root_path', default='.')
     parser.add_argument('--data_path')
     # Parameters for training
-    parser.add_argument('--loss', help='loss used')
+    parser.add_argument('--loss', default='std', help='loss used')
     parser.add_argument('--n_epochs', default=50, type=int, help='Num of training epochs')
     # Parameters for optimizer
     parser.add_argument('--lr', default=0.01, type=float, help='Initial learning rate')
