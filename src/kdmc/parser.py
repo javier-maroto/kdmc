@@ -11,6 +11,7 @@ def parse_args(args=None):
     parser.add_argument('--resume', '-r', type=str, help='resume from checkpoint')
     parser.add_argument('--arch', default='resnet', choices=['resnet'], help='Target model architecture')
     parser.add_argument('--profile', action='store_true', help='Profile the model')
+    parser.add_argument('--saved_model', type=str, help='Path to model to load')
     # Path parameters
     parser.add_argument('--root_path', default='.')
     parser.add_argument('--data_path')
@@ -36,7 +37,7 @@ def parse_args(args=None):
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
     parser.add_argument('--n_workers', default=2, type=int, help='Number of dataloader workers')
     parser.add_argument('--time_samples', type=int, help='Number of time samples of the IQ signal')
-    parser.add_argument('--return_ml', action='store_true', help='Return the maximum likelihood')
+    parser.add_argument('--return_ml', action='store_true', help='Return the maximum likelihood')  # DEPRECATED
     # Parameters for AKD and self distillation
     parser.add_argument('--kt_path', nargs="+", help='path of the stored models')
     parser.add_argument('--kt_alpha', type=float, help='Mixing rate (1.0 = only use kt preds)')
