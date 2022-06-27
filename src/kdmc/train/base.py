@@ -12,10 +12,10 @@ import torch.nn.functional as F
 from kdmc.attack.core import SPR_Attack
 
 from kdmc.attack.pgd import PGD
-from kdmc.data.core import get_num_classes
+from kdmc.data.core import get_classes, get_num_classes
 from kdmc.model.max_likelihood import MaxLikelihoodModel
 from kdmc.plot import plot_acc_vs_snr
-from kdmc.train.testing import get_acc_metrics, measure_cosine_similarity, measure_margins
+from kdmc.train.testing import get_acc_metrics, get_acc_metrics_wo_ml, measure_cosine_similarity, measure_margins
 
 
 class Trainer(abc.ABC):
@@ -36,11 +36,15 @@ class Trainer(abc.ABC):
         self.save_inter = args.save_inter
         self.root_path = args.root_path
         self.data_path = args.data_path
+        self.classes = get_classes(self.dataset)
         
-        self.ml_preds = torch.zeros(
-            [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
-            device=self.device)
-        self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
+        self.ml_preds = None
+        if self.dataset not in ('rml2016.10a'):
+            self.ml_preds = torch.zeros(
+                [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
+                device=self.device)
+            self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
+            
         # Gradient clipping
         if args.grad_clip is not None:
             for p in self.net.parameters():
@@ -48,12 +52,13 @@ class Trainer(abc.ABC):
 
     def get_ml_preds(self, dl, ml_preds):
         states_path = self.data_path.joinpath('synthetic/signal/states')
-        ml_model = MaxLikelihoodModel(states_path, device=self.device)
+        ml_model = MaxLikelihoodModel(states_path, self.classes, device=self.device)
+        n_span_symb = 8
         print('Computing ML predictions')
         for batch in tqdm(dl):
             sps = batch['sps']
             rolloff = batch['rolloff']
-            target_mask = batch['y'].argmax(dim=-1) < 14  # 0-13 are supported classes
+            target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
             for a in sps.unique():
                 for b in rolloff.unique():
                     mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
@@ -63,7 +68,11 @@ class Trainer(abc.ABC):
                     snr_ml = batch['snr_filt'][mask].to(self.device)
                     y = batch['y'][mask].to(self.device)
                     idx = batch['idx'][mask].to(self.device, dtype=torch.long)
-                    ml_model.create_filter(Ls=a.numpy().astype(np.int), rolloff=b.numpy())
+                    ls = a.numpy().astype(np.int)
+                    rf = b.numpy()
+                    while ls * n_span_symb >= x.shape[-1]:
+                        n_span_symb //= 2
+                    ml_model.create_filter(Ls=ls, rolloff=rf, n_span_symb=n_span_symb)
                     ml_preds_ = ml_model.compute_ml(x, snr_ml)
                     ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                     ml_preds[idx] = ml_preds_
@@ -73,10 +82,12 @@ class Trainer(abc.ABC):
         return ml_preds
 
     def get_adv_ml_preds(self, batch, x_adv):
-        ml_model = MaxLikelihoodModel(self.data_path.joinpath('synthetic/signal/states'), device=self.device)
+        ml_model = MaxLikelihoodModel(
+            self.data_path.joinpath('synthetic/signal/states'), self.classes, device=self.device)
         sps = batch['sps']
         rolloff = batch['rolloff']
-        target_mask = batch['y'].argmax(dim=-1) < 14  # 0-13 are supported classes
+        n_span_symb = 8
+        target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
         ml_preds = torch.zeros([x_adv.shape[0], get_num_classes(self.dataset)], device=self.device)
         for a in sps.unique():
             for b in rolloff.unique():
@@ -86,7 +97,11 @@ class Trainer(abc.ABC):
                 x = batch['x'][mask].to(self.device)
                 snr_ml = batch['snr_filt'][mask].to(self.device)
                 y = batch['y'][mask].to(self.device)
-                ml_model.create_filter(Ls=a.numpy().astype(np.int), rolloff=b.numpy())
+                ls = a.numpy().astype(np.int)
+                rf = b.numpy()
+                while ls * n_span_symb >= x.shape[-1]:
+                    n_span_symb //= 2
+                ml_model.create_filter(Ls=ls, rolloff=rf, n_span_symb=n_span_symb)
                 ml_preds_ = ml_model.compute_advml(x, x_adv[mask], snr_ml)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                 ml_preds[mask] = ml_preds_
@@ -131,11 +146,13 @@ class Trainer(abc.ABC):
                 total += targets.size(0)
                 correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
                 # Compute ML accuracy
-                ml_preds = self.ml_preds[idx]
-                correct['clean_ml'] += predicted.eq(ml_preds.argmax(1)).sum().item()
-
+                if self.ml_preds is not None:
+                    ml_preds = self.ml_preds[idx]
+                    correct['clean_ml'] += predicted.eq(ml_preds.argmax(1)).sum().item()
+        if self.ml_preds is not None:
+            wandb.log({'test.acc_ml': 100.*correct['clean_ml']/total}, commit=False)
         wandb.log({
-            'test.acc': 100.*correct['clean']/total, 'test.acc_ml': 100.*correct['clean_ml']/total,
+            'test.acc': 100.*correct['clean']/total,
             'lr': self.scheduler.get_last_lr()[0], 'epoch': epoch})
 
     def val_slow(self, epoch):
@@ -161,8 +178,9 @@ class Trainer(abc.ABC):
                 total += targets.size(0)
                 correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
                 # Compute ML accuracy
-                ml_preds = self.ml_preds[idx]
-                ml_correct['clean'] += predicted.eq(ml_preds.argmax(1)).sum().item()
+                if self.ml_preds is not None:
+                    ml_preds = self.ml_preds[idx]
+                    ml_correct['clean'] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
                 for key, atk in slow_atks.items():
                     with torch.enable_grad():
@@ -171,14 +189,18 @@ class Trainer(abc.ABC):
                     _, predicted = outputs.max(1)
                     correct[key] += predicted.eq(targets.argmax(1)).sum().item()
                     # Compute ML accuracy
-                    ml_preds = self.get_adv_ml_preds(batch, x_adv)
-                    ml_correct[key] += predicted.eq(ml_preds.argmax(1)).sum().item()
+                    if self.ml_preds is not None:
+                        ml_preds = self.get_adv_ml_preds(batch, x_adv)
+                        ml_correct[key] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
         log_dict = {f'test.{key}_acc': 100.*correct[key]/total for key in slow_atks}
-        log_dict.update({f'test.{key}_acc_ml': 100.*ml_correct[key]/total for key in slow_atks})
+        if self.ml_preds is not None:
+            log_dict.update({f'test.{key}_acc_ml': 100.*ml_correct[key]/total for key in slow_atks})
         wandb.log(log_dict, commit=False)
+        if self.ml_preds is not None:
+            wandb.log({'test.acc_ml': 100.*ml_correct['clean']/total}, commit=False)
         wandb.log({
-            'test.acc': 100.*correct['clean']/total, 'test.acc_ml': 100.*ml_correct['clean']/total,
+            'test.acc': 100.*correct['clean']/total,
             'lr': self.scheduler.get_last_lr()[0], 'epoch': epoch})
 
     def test(self):
@@ -187,12 +209,15 @@ class Trainer(abc.ABC):
             os.makedirs(res_path)
         
         self.net.eval()
-        res = {'true': [], 'clean': [], 'clean_ml': [], 'snr': []}
+        res = {'true': [], 'clean': [], 'snr': []}
+        if self.ml_preds is not None:
+            res['clean_ml'] = []
         total = 0
         atks = self.get_test_attacks()
         for key in atks:
             res[key] = []
-            res[f'{key}_ml'] = []
+            if self.ml_preds is not None:
+                res[f'{key}_ml'] = []
         #res.update(self.get_geometric_metrics())
         with torch.no_grad():
             for batch in tqdm(self.test_dl):
@@ -201,27 +226,33 @@ class Trainer(abc.ABC):
                 snr = batch['snr'].to(self.device)
                 outputs = self.net(inputs)
                 predicted = outputs.argmax(1)
-                ml_preds = self.ml_preds[idx]
                 total += targets.size(0)
                 res['true'].extend(batch['y'].argmax(1).numpy())
                 res['clean'].extend(predicted.cpu().numpy())
-                res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
                 res['snr'].extend(batch['snr'].numpy())
+                if self.ml_preds is not None:
+                    ml_preds = self.ml_preds[idx]
+                    res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
 
                 for key, atk in atks.items():
                     with torch.enable_grad():
                         x_adv = atk(inputs, targets, snr)
                     outputs = self.net(x_adv)
                     predicted = outputs.argmax(1)
-                    ml_preds = self.get_adv_ml_preds(batch, x_adv)
                     res[key].extend(predicted.cpu().numpy())
-                    res[f'{key}_ml'].extend(ml_preds.argmax(1).cpu().numpy())
+                    if self.ml_preds is not None:
+                        ml_preds = self.get_adv_ml_preds(batch, x_adv)
+                        res[f'{key}_ml'].extend(ml_preds.argmax(1).cpu().numpy())
         for key, value in res.items():
             res[key] = np.array(value)
         df = pd.DataFrame(res)
-        get_acc_metrics(df)
+        if self.ml_preds is not None:
+            gam = get_acc_metrics
+        else:
+            gam = get_acc_metrics_wo_ml
+        gam(df)
         for key in atks:
-            get_acc_metrics(df, key)
+            gam(df, key)
             """
         wandb.log({
             'cosine_similarity': df['cs_ml'].mean(), 

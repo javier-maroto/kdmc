@@ -74,7 +74,7 @@ class RML2016_10A_D(Dataset):
         if not os.path.isfile(self.dataset_path):
             self._download()
 
-        self.iq, self.modulation, self.snr = self.load()
+        self.iq, self.modulation, self.y, self.snr = self.load()
         self.len = self.iq.shape[0]
 
     def load(self):
@@ -84,18 +84,25 @@ class RML2016_10A_D(Dataset):
 
         modulation = []
         snrs = []
+        y = []
         iq = list()
         for key, value in data.items():
             num_iq_samples = value.shape[0]
-            mod = np.full(num_iq_samples, self.class_to_idx[key[0]])
+            mod_idx = self.class_to_idx[key[0]]
+            mod = np.full(num_iq_samples, mod_idx)
+            y_item = np.zeros([num_iq_samples, len(self.classes)])
+            y_item[:, mod_idx] = 1
             snr = np.full(num_iq_samples, key[1])
             modulation.append(mod)
             snrs.append(snr)
             iq.append(value[..., :self.time_samples])
+            y.append(y_item)
+            
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snrs, axis=0)
         iq = np.concatenate(iq, axis=0)
-        return iq, modulation, snr
+        y = np.concatenate(y, axis=0)
+        return iq, modulation, y, snr
 
     def _download(self):
         with tqdm(unit="B", unit_scale=True, miniters=1) as t:
@@ -110,7 +117,7 @@ class RML2016_10A_D(Dataset):
     def __getitem__(self, idx):
         return {
             "x": self.iq[idx],
-            "y": self.modulation[idx],
+            "y": self.y[idx],
             "snr": self.snr[idx],
             "idx": idx,
         }

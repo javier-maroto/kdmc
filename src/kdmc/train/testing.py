@@ -31,6 +31,25 @@ def get_acc_metrics(df, atk_key=None):
         f"test.{label}acc_ml_snr": wandb.plot.line(table, "snr", "acc_ml", title=f"Accuracy vs SNR ({label})"),
         })
 
+def get_acc_metrics_wo_ml(df, atk_key=None):
+    """
+    Compute the accuracy metrics for the given attack.
+    """
+    # Compute the accuracy metrics
+    if atk_key is None:
+        col = 'clean'
+        label = ''
+    else:
+        col = atk_key
+        label = atk_key + '_'
+    temp = df.copy()
+    temp['acc'] = temp[col] == temp['true']
+    df_snr = temp.groupby('snr', as_index=False)[['acc']].mean().sort_values('snr')
+    table = wandb.Table(data=df_snr, columns = ["snr", "acc"])
+    wandb.log({
+        f"test.{label}acc": 100 * temp['acc'].mean(),
+        f"test.{label}acc_snr": wandb.plot.line(table, "snr", "acc", title=f"Accuracy vs SNR ({label})"),
+        })
 
 def measure_cosine_similarity(net1, net2, x, y, snr):
     atk1 = SPR_Attack(PGD(net1, steps=7), 20, 0.25)

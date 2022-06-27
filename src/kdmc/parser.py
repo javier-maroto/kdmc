@@ -6,7 +6,7 @@ from pathlib import Path
 def parse_args(args=None):
     # General parameters
     parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-    parser.add_argument('--id', help='Run id')
+    parser.add_argument('--id', type=str, help='Run id', default='test')
     parser.add_argument('--seed', default=0, type=int, help='Seed of the model / dataloader')
     parser.add_argument('--resume', '-r', type=str, help='resume from checkpoint')
     parser.add_argument('--arch', default='resnet', choices=['resnet'], help='Target model architecture')
@@ -32,7 +32,7 @@ def parse_args(args=None):
     # Parameters for adversarial training
     parser.add_argument('--atk', nargs="+", default=['pgd', 'Linf', '20', '0.25', '7'], type=str, help='Attack (name, **kwargs)')
     # Parameters for data
-    parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p'], help='Dataset used')
+    parser.add_argument('--dataset', default='s1024', choices=['rml2016.10a', 's1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p', 'srml2016.10a'], help='Dataset used')
     parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
     parser.add_argument('--n_batches', default=-1, type=int, help='Number of batches to use')
     parser.add_argument('--n_workers', default=2, type=int, help='Number of dataloader workers')

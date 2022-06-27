@@ -9,39 +9,40 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, Subset
 
+from abc import abstractmethod, ABC
 
-def get_sawgn_datasets(path, time_samples=None, seed=0):
 
-    full = SBasic(path, time_samples)
-    full_test = SBasic(path, time_samples)
+def split_synthetic_dataset(dataset, seed=0):
+    """Split the synthetic dataset"""
 
-    keys = tuple(zip(full.modulation, full.snr))
-    d = dict(zip(set(keys), range(len(full))))
+    keys = tuple(zip(dataset.modulation, dataset.snr))
+    d = dict(zip(set(keys), range(len(dataset))))
     groups = np.array([d[x] for x in keys])
     train_idxs, test_idxs = train_test_split(
-        np.arange(len(full)),
+        np.arange(len(dataset)),
         test_size=0.1,
         random_state=seed,
         stratify=groups,
     )
-    trainset = Subset(full, train_idxs)
-    testset = Subset(full_test, test_idxs)
+    trainset = Subset(dataset, train_idxs)
+    testset = Subset(dataset, test_idxs)
 
     return trainset, testset
 
 
-class SBasic(Dataset):
+class Synthetic(Dataset, ABC):
     """Dataset class"""
 
-    folder = "synthetic/signal"
-    classes = (
+    ALL_CLASSES = np.array([
         "BPSK", "QPSK", "8-PSK",
         "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
         "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
         'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
-    )
+    ])
+    folder = "synthetic/signal"
+    classes = ()
     time_samples = 1024
-    filename = "sawgn.npz"
+    filename = None
 
     def __init__(self, raw_path, time_samples=None):
         super().__init__()
@@ -55,10 +56,13 @@ class SBasic(Dataset):
             else:
                 self.time_samples = time_samples
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
+        self.reorder = np.array([np.nonzero(self.ALL_CLASSES == x) for x in self.classes])
+        self.reorder = np.ravel(self.reorder)
         if not os.path.isfile(self.data_path.joinpath(self.filename)):
             self.create_dataset()
         self.iq, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs = self.load()
         self.len = self.iq.shape[0]
+        
 
     def compute_snr(self, signal, noise):
         """Computes the SNR of one/multiple signal (assumes last two dimensions are the 
@@ -67,12 +71,14 @@ class SBasic(Dataset):
             raise ValueError("Signal and noise must have the same shape")
         return 10 * np.log10(np.mean(signal ** 2, axis=(-1,-2)) / np.mean(noise ** 2, axis=(-1,-2)))
 
-    def create_dataset(self):
-        # Set seed for reproducibility
-        np.random.seed(0)
+    @abstractmethod
+    def filter_paths(self, df_path):
+        """Filter the possible communication scenarios based on the dataset specifications"""
+        pass
 
+    def create_dataset(self):
         paths = []
-        for _, _, files in os.walk(self.data_path.joinpath("rx_x")):
+        for _, _, files in os.walk(os.path.join(self.data_path, "rx_x")):
             for file in files:
                 if file.endswith(".mat"):
                     paths.append(file)
@@ -85,14 +91,10 @@ class SBasic(Dataset):
         df_path['rolloff'] = df_path['rolloff'].astype(float)
         df_path['snr'] = df_path['snr'].astype(float)
         
-        df_filt = df_path.loc[
-            (df_path.channel == 'AWGN') &
-            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
-            df_path.modulation.isin(self.classes)]
-        df_params = df_filt.groupby(['sps', 'rolloff']).count()
-        n_params = df_params.shape[0]
-        basic_paths = df_filt['path'].values
-        print(df_filt[['fs','sps','rolloff']].drop_duplicates())
+        df_res = self.filter_paths(df_path)
+        n_params = df_res.groupby(['fs', 'sps', 'rolloff']).count().shape[0]
+        basic_paths = df_res['path'].values
+
         modulation = []
         rx_x = []
         y = []
@@ -110,7 +112,9 @@ class SBasic(Dataset):
             # Load modulation
             mod = df_path.loc[df_path.path == path, 'modulation'].values[0]
             modulation.append(np.full(data.shape[0], self.class_to_idx[mod]))
-            y.append(scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs])
+            yp = scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs]
+            yp = yp[:, self.reorder]
+            y.append(yp)
             # Load sps
             sps = df_path.loc[df_path.path == path, 'sps'].values[0]
             sps_list.append(np.full(data.shape[0], sps))
@@ -144,7 +148,6 @@ class SBasic(Dataset):
         fs = np.concatenate(fs_list, axis=0)
         snr_filt = np.concatenate(snr_filt, axis=0)
         
-        assert len(np.unique(modulation)) == 20, len(np.unique(modulation))
         assert y.shape[0] == snr_filt.shape[0], (y.shape, snr_filt.shape)
         np.savez(
             self.data_path.joinpath(self.filename),
@@ -153,16 +156,15 @@ class SBasic(Dataset):
 
     def load(self):
         """Returns the pytables arrays for the iq signals, modulations and snrs"""
-        data = np.load(self.data_path.joinpath(self.filename))
+        data = np.load(os.path.join(self.data_path, self.filename))
         iq = data['iq']
         modulation = data['modulation']
         y = data['y']
         snr = data['snr']
         snr_filt = data['snr_filt']
         sps = data['sps']
-        rolloff = data['rolloff']
         fs = data['fs']
-        
+        rolloff = data['rolloff']
         return iq, modulation, y, snr, snr_filt, sps, rolloff, fs
 
     def __len__(self):
@@ -179,3 +181,91 @@ class SBasic(Dataset):
             "sps": self.sps[idx],
             "rolloff": self.rolloff[idx]
         }
+
+
+class SAWGNp0c20(Synthetic):
+    """Synthetic dataset with basic parameters"""
+
+    classes = (
+        "BPSK", "QPSK", "8-PSK",
+        "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
+        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
+        'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
+    )
+    filename = "sawgn_p0c20.npz"
+
+    def filter_paths(self, df_path):
+        df_res = df_path.loc[
+            (df_path.sps == 8) & (df_path.channel == 'AWGN') &
+            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
+            df_path.modulation.isin(self.classes)]
+        return df_res
+
+class SAWGNp1c20(Synthetic):
+    """Synthetic dataset with basic parameters"""
+
+    classes = (
+        "BPSK", "QPSK", "8-PSK",
+        "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
+        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
+        'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
+    )
+    filename = "sawgn_p1c20.npz"
+
+    def filter_paths(self, df_path):
+        df_res = df_path.loc[
+            (df_path.channel == 'AWGN') &
+            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
+            df_path.modulation.isin(self.classes)]
+        return df_res
+
+
+class SAWGNp2c20(Synthetic):
+    """Synthetic dataset with basic parameters"""
+
+    classes = (
+        "BPSK", "QPSK", "8-PSK",
+        "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
+        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
+        'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
+    )
+    filename = "sawgn_p2c20.npz"
+
+    def filter_paths(self, df_path):
+        df_res = df_path.loc[
+            (df_path.channel == 'AWGN') &
+            (df_path.fs == 2e5) &
+            df_path.modulation.isin(self.classes)]
+        return df_res
+
+
+class SRML2016_10A(Synthetic):
+    """Synthetic dataset that emulates the RML2016.10a dataset"""
+
+    classes = (
+        "B-FM",
+        "DSB-AM",
+        "SSB-AM",
+        "CPFSK",
+        "GFSK",
+        "PAM4",
+        "BPSK",
+        "QPSK",
+        "8-PSK",
+        "16-QAM",
+        "64-QAM"
+    )
+    filename = "sawgn_p2c11.npz"
+    time_samples = 128
+
+    def __init__(self, raw_path, time_samples=None):
+        super().__init__(raw_path, time_samples)
+        if time_samples is not None:
+            raise ValueError("time_samples cannot be set for SRML2016_10A")
+    
+    def filter_paths(self, df_path):
+        df_res = df_path.loc[
+            (df_path.channel == 'AWGN') &
+            (df_path.fs == 2e5) &
+            df_path.modulation.isin(self.classes)]
+        return df_res

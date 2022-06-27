@@ -24,15 +24,15 @@ class MaxLikelihoodModel:
         "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
     ]
     
-    def __init__(self, states_path, modulations=None, device=None) -> None:
+    def __init__(self, states_path, modulations, device=None) -> None:
         self.device = device
-        if modulations is None:
-            modulations = self.SUPPORTED_MODS
-        else:
-            for m in modulations:
-                if m not in self.SUPPORTED_MODS:
-                    raise ValueError(f"Modulation {m} not supported.")
-        self.modulation_dict = dict(zip(range(len(modulations)), modulations))
+        self.supported = torch.full([len(modulations)], False, dtype=torch.bool)
+        supp_mods = []
+        for mi, m in enumerate(modulations):
+            if m in self.SUPPORTED_MODS:
+                self.supported[mi] = True
+                supp_mods.append(m)
+        self.modulation_dict = dict(zip(range(len(supp_mods)), supp_mods))
         self.states_dict = self.load_states_dict(states_path)
         self.h = None
         self.Ls = None
@@ -179,11 +179,11 @@ class MaxLikelihoodModel:
         Returns:
             torch.Tensor: likelihood values ()
         """
-        extra = torch.zeros(ml_preds.shape[0], targets.shape[1] - ml_preds.shape[1], device=self.device)
-        mask = targets.argmax(dim=-1) > (ml_preds.shape[1] - 1)
-        ml_preds = torch.cat([ml_preds, extra], dim=1)
-        ml_preds[mask] = targets[mask]
-        return ml_preds
+        res = torch.zeros(ml_preds.shape[0], len(self.supported), device=self.device)
+        mask = (targets * self.supported.to(self.device)).sum(-1) == 1
+        res[:, self.supported] = ml_preds
+        res[mask] = targets[mask]
+        return res
 
     def return_ml_model(self, snr=None):
         """Returns the model.
