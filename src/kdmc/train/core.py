@@ -6,6 +6,7 @@ from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
 from kdmc.train.at import ATTrainer, LNRATTrainer, MLATTrainer
+from kdmc.train.base import MLTrainer
 from kdmc.train.rslad import RSLADTrainer
 from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, STDTrainer, SelfMLSTDTrainer
 from kdmc.model.resnet import ResNet_OShea
@@ -70,5 +71,7 @@ def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_up
         return LNRATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'std_sml':
         return SelfMLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'ml':
+        return MLTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     else:
         raise NotImplementedError(f"loss not implemented: {args.loss}")

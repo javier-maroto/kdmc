@@ -2,7 +2,7 @@
 # pylint: disable=abstract-method,arguments-differ
 import os
 import scipy.io
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,7 @@ def split_synthetic_dataset(dataset, seed=0):
 
 
 class Synthetic(Dataset, ABC):
-    """Dataset class"""
+    """Dataset class. They normally have 2.6M samples in total."""
 
     ALL_CLASSES = np.array([
         "BPSK", "QPSK", "8-PSK",
@@ -44,7 +44,7 @@ class Synthetic(Dataset, ABC):
     time_samples = 1024
     filename = None
 
-    def __init__(self, raw_path, time_samples=None):
+    def __init__(self, raw_path, time_samples=None, dataset_size=None):
         super().__init__()
         self.data_path = raw_path.joinpath(self.folder)
         if time_samples is not None:
@@ -59,8 +59,11 @@ class Synthetic(Dataset, ABC):
         self.reorder = np.array([np.nonzero(self.ALL_CLASSES == x) for x in self.classes])
         self.reorder = np.ravel(self.reorder)
         if not os.path.isfile(self.data_path.joinpath(self.filename)):
-            self.create_dataset()
-        self.iq, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs = self.load()
+            print("Creating dataset...")
+            self.create_dataset(dataset_size)
+        else:
+            print("Dataset exists in", self.data_path.joinpath(self.filename))
+        self.iq, self.rx_s, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs = self.load()
         self.len = self.iq.shape[0]
         
 
@@ -76,7 +79,7 @@ class Synthetic(Dataset, ABC):
         """Filter the possible communication scenarios based on the dataset specifications"""
         pass
 
-    def create_dataset(self):
+    def create_dataset(self, dataset_size=None):
         paths = []
         for _, _, files in os.walk(os.path.join(self.data_path, "rx_x")):
             for file in files:
@@ -92,56 +95,66 @@ class Synthetic(Dataset, ABC):
         df_path['snr'] = df_path['snr'].astype(float)
         
         df_res = self.filter_paths(df_path)
-        n_params = df_res.groupby(['fs', 'sps', 'rolloff']).count().shape[0]
-        basic_paths = df_res['path'].values
+        if dataset_size is None:
+            n_params = df_res.groupby(['channel', 'fs', 'sps', 'rolloff']).count().shape[0]
+        else:
+            n_params = (df_res.shape[0] * 10000) / dataset_size
 
         modulation = []
-        rx_x = []
+        rx_x, rx_s = [], []  # rx_s is the signal received as if there was only awgn noise
         y = []
         snr = []
         snr_filt, sps_list, rolloff_list, fs_list = [], [], [], []
-        for path in tqdm(basic_paths):
+        for i in trange(df_res.shape[0], desc="Creating dataset"):
+            df1 = df_res.iloc[i]
+            path = df1['path']
             # Load iq data
             data = scipy.io.loadmat(self.data_path.joinpath("rx_x", path))["rx_x"]
-            n_signals = data.shape[0] // n_params  # Normalize to compare with other datasets
+            n_signals = int(data.shape[0] / n_params)  # Normalize to compare with other datasets
             idxs = np.random.choice(data.shape[0], n_signals, replace=False)
             data = data[idxs, :self.time_samples]
             assert data.shape[0] == n_signals, (data.shape, n_signals)
-            data = np.stack([data.real, data.imag], axis=1)
-            rx_x.append(data.astype(np.float32))
+            x = np.stack([data.real, data.imag], axis=1)
+            rx_x.append(x.astype(np.float32))
             # Load modulation
-            mod = df_path.loc[df_path.path == path, 'modulation'].values[0]
+            mod = df1['modulation']
             modulation.append(np.full(data.shape[0], self.class_to_idx[mod]))
             yp = scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs]
             yp = yp[:, self.reorder]
             y.append(yp)
             # Load sps
-            sps = df_path.loc[df_path.path == path, 'sps'].values[0]
+            sps = df1['sps']
             sps_list.append(np.full(data.shape[0], sps))
             # Load rolloff
-            rolloff = df_path.loc[df_path.path == path, 'rolloff'].values[0]
+            rolloff = df1['rolloff']
             rolloff_list.append(np.full(data.shape[0], rolloff))
             # Load fs
-            fs = df_path.loc[df_path.path == path, 'fs'].values[0]
+            fs = df1['fs']
             fs_list.append(np.full(data.shape[0], fs))
             # Load snr
-            snr_i = df_path.loc[df_path.path == path, 'snr'].values[0]
+            snr_i = df1['snr']
             snr.append(np.full(data.shape[0], snr_i))
             if mod in ['GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM','OQPSK']:
-                snr_filt.append(np.full(data.shape[0], np.nan))
+                snr_filt.append(np.full(x.shape[0], np.nan))
+                rx_s.append(np.full_like(x, np.nan))
             else:
                 # Load rx_s and tx_s
                 data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"][idxs]
                 data = np.stack([data.real, data.imag], axis=1)
-                rx_s = data.astype(np.float32)
+                rs = data.astype(np.float32)
                 data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"][idxs]
                 data = np.stack([data.real, data.imag], axis=1)
-                tx_s = data.astype(np.float32)
-                snr_filt.append(self.compute_snr(tx_s, rx_s - tx_s))
+                ts = data.astype(np.float32)
+                snr_filt.append(self.compute_snr(ts, rs - ts))
+                rs_extended = np.zeros_like(x)
+                n_symb = int(x.shape[-1] / sps)
+                rs_extended[..., :n_symb] = rs[..., :n_symb]
+                rx_s.append(rs_extended)
 
         modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
         snr = np.concatenate(snr, axis=0)
         rx_x = np.concatenate(rx_x, axis=0)
+        rx_s = np.concatenate(rx_s, axis=0)
         y = np.concatenate(y, axis=0, dtype=np.float32)
         sps = np.concatenate(sps_list, axis=0)
         rolloff = np.concatenate(rolloff_list, axis=0)
@@ -151,13 +164,14 @@ class Synthetic(Dataset, ABC):
         assert y.shape[0] == snr_filt.shape[0], (y.shape, snr_filt.shape)
         np.savez(
             self.data_path.joinpath(self.filename),
-            iq=rx_x, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt,
+            iq=rx_x, rx_s=rx_s, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt,
             sps=sps, rolloff=rolloff, fs=fs)
 
     def load(self):
         """Returns the pytables arrays for the iq signals, modulations and snrs"""
         data = np.load(os.path.join(self.data_path, self.filename))
         iq = data['iq']
+        rx_s = data['rx_s']
         modulation = data['modulation']
         y = data['y']
         snr = data['snr']
@@ -165,7 +179,7 @@ class Synthetic(Dataset, ABC):
         sps = data['sps']
         fs = data['fs']
         rolloff = data['rolloff']
-        return iq, modulation, y, snr, snr_filt, sps, rolloff, fs
+        return iq, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs
 
     def __len__(self):
         return self.len
@@ -173,6 +187,7 @@ class Synthetic(Dataset, ABC):
     def __getitem__(self, idx):
         return {
             "x": self.iq[idx],
+            "x_ml": self.rx_s[idx],
             "y": self.y[idx],
             "snr": self.snr[idx],
             "snr_filt": self.snr_filt[idx],
@@ -239,8 +254,27 @@ class SAWGNp2c20(Synthetic):
         return df_res
 
 
+class Sp0c20(Synthetic):
+    """Synthetic dataset with basic parameters"""
+
+    classes = (
+        "BPSK", "QPSK", "8-PSK",
+        "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
+        "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
+        'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
+    )
+    filename = "s_p0c20.npz"
+
+    def filter_paths(self, df_path):
+        df_res = df_path.loc[
+            (df_path.sps == 8) &
+            (df_path.fs == 2e5) & (df_path.rolloff == 0.35) &
+            df_path.modulation.isin(self.classes)]
+        return df_res
+
+
 class SRML2016_10A(Synthetic):
-    """Synthetic dataset that emulates the RML2016.10a dataset"""
+    """Synthetic dataset with basic parameters"""
 
     classes = (
         "B-FM",
@@ -258,14 +292,11 @@ class SRML2016_10A(Synthetic):
     filename = "sawgn_p2c11.npz"
     time_samples = 128
 
-    def __init__(self, raw_path, time_samples=None):
-        super().__init__(raw_path, time_samples)
-        if time_samples is not None:
-            raise ValueError("time_samples cannot be set for SRML2016_10A")
+    def __init__(self, raw_path, dataset_size=None):
+        super().__init__(raw_path, None, dataset_size)
     
     def filter_paths(self, df_path):
         df_res = df_path.loc[
-            (df_path.channel == 'AWGN') &
             (df_path.fs == 2e5) &
             df_path.modulation.isin(self.classes)]
         return df_res

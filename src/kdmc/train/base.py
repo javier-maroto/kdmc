@@ -53,29 +53,22 @@ class Trainer(abc.ABC):
     def get_ml_preds(self, dl, ml_preds):
         states_path = self.data_path.joinpath('synthetic/signal/states')
         ml_model = MaxLikelihoodModel(states_path, self.classes, device=self.device)
-        n_span_symb = 8
         print('Computing ML predictions')
         for batch in tqdm(dl):
             sps = batch['sps']
-            rolloff = batch['rolloff']
             target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
             for a in sps.unique():
-                for b in rolloff.unique():
-                    mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
-                    if mask.sum() == 0:
-                        continue
-                    x = batch['x'][mask].to(self.device)
-                    snr_ml = batch['snr_filt'][mask].to(self.device)
-                    y = batch['y'][mask].to(self.device)
-                    idx = batch['idx'][mask].to(self.device, dtype=torch.long)
-                    ls = a.numpy().astype(np.int)
-                    rf = b.numpy()
-                    while ls * n_span_symb >= x.shape[-1]:
-                        n_span_symb //= 2
-                    ml_model.create_filter(Ls=ls, rolloff=rf, n_span_symb=n_span_symb)
-                    ml_preds_ = ml_model.compute_ml(x, snr_ml)
-                    ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
-                    ml_preds[idx] = ml_preds_
+                mask = ((sps == a) & target_mask).to(self.device)
+                if mask.sum() == 0:
+                    continue
+                x = batch['x_ml'][mask].to(self.device)
+                snr_ml = batch['snr_filt'][mask].to(self.device)
+                y = batch['y'][mask].to(self.device)
+                idx = batch['idx'][mask].to(self.device, dtype=torch.long)
+                ls = a.numpy().astype(np.int)
+                ml_preds_ = ml_model.compute_ml_symb(x, snr_ml, sps=ls)
+                ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
+                ml_preds[idx] = ml_preds_
             y = batch['y'][~target_mask].to(self.device)
             idx = batch['idx'][~target_mask].to(self.device, dtype=torch.long)
             ml_preds[idx] = y
@@ -378,3 +371,65 @@ class KTTrainer(Trainer):
         logits = self.logits_kt(inputs)
         preds = [F.softmax(l, dim=-1) * b for l, b in zip(logits, self.beta)]
         return torch.sum(torch.stack(preds), dim=0)
+
+
+class MLTrainer(Trainer):
+
+    def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
+        self.id = args.id
+        self.seed = args.seed
+        self.arch = args.arch
+        self.dataset = args.dataset
+        self.net = net
+        self.train_dl = trainloader
+        self.test_dl = testloader
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.sch_updt = sch_updt
+        self.slow_rate = slow_rate
+        self.device = args.device
+        self.save_inter = args.save_inter
+        self.root_path = args.root_path
+        self.data_path = args.data_path
+        self.classes = get_classes(self.dataset)
+        
+        self.ml_preds = None
+        if self.dataset not in ('rml2016.10a'):
+            self.ml_preds = torch.zeros(
+                [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
+                device=self.device)
+            self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
+
+    def train(self, epoch):
+        pass
+
+    def test(self):
+        res_path = os.path.join("results", self.id)
+        if not os.path.exists(res_path):
+            os.makedirs(res_path)
+        
+        res = {'true': [], 'clean': [], 'snr': []}
+        if self.ml_preds is not None:
+            res['clean_ml'] = []
+        total = 0
+        #res.update(self.get_geometric_metrics())
+        with torch.no_grad():
+            for batch in tqdm(self.test_dl):
+                targets = batch['y'].to(self.device)
+                idx = batch['idx'].to(self.device, dtype=torch.long)
+                outputs = self.ml_preds[idx]
+                predicted = outputs.argmax(1)
+                total += targets.size(0)
+                res['true'].extend(batch['y'].argmax(1).numpy())
+                res['clean'].extend(predicted.cpu().numpy())
+                res['snr'].extend(batch['snr'].numpy())
+                if self.ml_preds is not None:
+                    ml_preds = self.ml_preds[idx]
+                    res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
+
+        for key, value in res.items():
+            res[key] = np.array(value)
+        df = pd.DataFrame(res)
+        get_acc_metrics(df)
+        return res
+    

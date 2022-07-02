@@ -16,13 +16,15 @@ def get_datasets(args):
         return get_sbasic_datasets(args.data_path, args.time_samples, args.seed, use_filters=False)
     else:
         if args.dataset == 'sbasic':
-            dataset = ds.SAWGNp0c20(args.data_path, args.time_samples)
+            dataset = ds.SAWGNp0c20(args.data_path, args.time_samples, args.dataset_size)
         elif args.dataset == 'sawgn':
-            dataset = ds.SAWGNp1c20(args.data_path, args.time_samples)
+            dataset = ds.SAWGNp1c20(args.data_path, args.time_samples, args.dataset_size)
         elif args.dataset == 'sawgn2p':
-            dataset = ds.SAWGNp2c20(args.data_path, args.time_samples)
+            dataset = ds.SAWGNp2c20(args.data_path, args.time_samples, args.dataset_size)
         elif args.dataset == 'srml2016.10a':
-            dataset = ds.SRML2016_10A(args.data_path)
+            dataset = ds.SRML2016_10A(args.data_path, args.dataset_size)
+        elif args.dataset == 'sp0c20':
+            dataset = ds.Sp0c20(args.data_path, args.time_samples, args.dataset_size)
         else:
             raise NotImplementedError(f"dataset not implemented: {args.dataset}")
         return ds.split_synthetic_dataset(dataset, args.seed)
@@ -47,7 +49,7 @@ def get_classes(dataset):
             "16-QAM",
             "64-QAM"
         )
-    elif dataset in ('s1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p'):
+    elif dataset in ('s1024', 'sbasic', 'sbasic_nf', 'sawgn', 'sawgn2p', 'sp0c20'):
         return (
             "BPSK", "QPSK", "8-PSK",
             "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",
