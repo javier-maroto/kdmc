@@ -56,6 +56,8 @@ class Trainer(abc.ABC):
         print('Computing ML predictions')
         for batch in tqdm(dl):
             sps = batch['sps']
+            idx = batch['idx'].to(self.device, dtype=torch.long)
+            ml_preds[idx] = batch['y'].to(self.device)
             target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
             for a in sps.unique():
                 mask = ((sps == a) & target_mask).to(self.device)
@@ -69,9 +71,6 @@ class Trainer(abc.ABC):
                 ml_preds_ = ml_model.compute_ml_symb(x, snr_ml, sps=ls)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                 ml_preds[idx] = ml_preds_
-            y = batch['y'][~target_mask].to(self.device)
-            idx = batch['idx'][~target_mask].to(self.device, dtype=torch.long)
-            ml_preds[idx] = y
         return ml_preds
 
     def get_adv_ml_preds(self, batch, x_adv):

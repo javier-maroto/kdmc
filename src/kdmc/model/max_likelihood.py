@@ -208,9 +208,7 @@ class MaxLikelihoodModel:
             torch.Tensor: likelihood values ()
         """
         res = torch.zeros(ml_preds.shape[0], len(self.supported), device=self.device)
-        mask = (targets * self.supported.to(self.device)).sum(-1) == 1
         res[:, self.supported] = ml_preds
-        res[mask] = targets[mask]
         return res
 
     def return_ml_model(self, snr=None):

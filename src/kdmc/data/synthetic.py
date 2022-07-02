@@ -170,8 +170,8 @@ class Synthetic(Dataset, ABC):
     def load(self):
         """Returns the pytables arrays for the iq signals, modulations and snrs"""
         data = np.load(os.path.join(self.data_path, self.filename))
-        iq = data['iq']
-        rx_s = data['rx_s']
+        iq = data['iq'][..., :self.time_samples]
+        rx_s = data['rx_s'][..., :self.time_samples]
         modulation = data['modulation']
         y = data['y']
         snr = data['snr']
