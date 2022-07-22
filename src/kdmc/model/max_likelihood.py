@@ -217,16 +217,18 @@ class MaxLikelihoodModel:
         class MLModel(nn.Module):
             def __init__(self, ml_model, snr=None):
                 super().__init__()
-                self.h = nn.Parameter(ml_model.h.detach())
+                #self.h = nn.Parameter(ml_model.h.detach())
                 self.states_dict = ml_model.states_dict
                 self.device = ml_model.device
                 self.snr = snr
-                self.Ls = ml_model.Ls
+                #self.Ls = ml_model.Ls
+
+                self.dummy = nn.Parameter(torch.zeros(1, device=self.device))
 
             def forward(self, x):
-                x = torch.conv1d(x, self.h, groups=2)
+                #x = torch.conv1d(x, self.h, groups=2)
                 # Downsample
-                x = x[..., ::self.Ls]
+                #x = x[..., ::self.Ls]
                 N0 = 10 ** (-self.snr/20)
                 sigma = N0 / np.sqrt(2)
                 Ks = -torch.log(2 * torch.pi * sigma ** 2).view(-1, 1)

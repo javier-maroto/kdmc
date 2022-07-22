@@ -15,7 +15,7 @@ def main():
 
     args = parse_args()
 
-    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=args.root_path)
+    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=args.root_path, group=f'{args.id}_{args.dataset_size}')
     wandb.config.update(args)
 
     # Seed
@@ -53,6 +53,7 @@ def main():
         trainer.loop(epoch)
     if not args.skip_test:
         trainer.test()
+    wandb.finish()
 
 
 if __name__ == "__main__":

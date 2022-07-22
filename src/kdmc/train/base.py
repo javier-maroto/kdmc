@@ -406,8 +406,9 @@ class MLTrainer(Trainer):
         res_path = os.path.join("results", self.id)
         if not os.path.exists(res_path):
             os.makedirs(res_path)
-        
-        res = {'true': [], 'clean': [], 'snr': []}
+        ml = MaxLikelihoodModel(
+            self.data_path.joinpath('synthetic/signal/states'), self.classes, device=self.device)
+        res = {'true': [], 'clean': [], 'pgd-7_20dB': [], 'snr': []}
         if self.ml_preds is not None:
             res['clean_ml'] = []
         total = 0
@@ -425,10 +426,23 @@ class MLTrainer(Trainer):
                 if self.ml_preds is not None:
                     ml_preds = self.ml_preds[idx]
                     res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
+                snr_ml = batch['snr_filt'].to(self.device)
+                ml_model = ml.return_ml_model(snr_ml)
+                atk = SPR_Attack(PGD(ml_model, steps=7), 20, 0.25)
+                x = batch['x_ml'].to(self.device)
+                x = x[..., :(x.shape[-1] // 8)] # TODO: sps can change with different datasets
+                with torch.enable_grad():
+                    x_adv = atk(x, targets[..., :14], snr_ml)
+                new_snr = -20 * torch.log10(10**(-snr_ml/20) + 10**(-20/20))
+                ml_preds = ml.compute_ml_symb(x_adv, new_snr)  
+                ml_preds = ml.adapt_unsupported(ml_preds, targets)
+                predicted = ml_preds.argmax(1)
+                res['pgd-7_20dB'].extend(predicted.cpu().numpy())
 
         for key, value in res.items():
             res[key] = np.array(value)
         df = pd.DataFrame(res)
         get_acc_metrics(df)
+        get_acc_metrics_wo_ml(df, atk_key='pgd-7_20dB')
         return res
     
