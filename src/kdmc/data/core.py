@@ -23,6 +23,8 @@ def get_datasets(args):
             dataset = ds.SAWGNp2c20(args.data_path, args.time_samples, args.dataset_size)
         elif args.dataset == 'srml2016.10a':
             dataset = ds.SRML2016_10A(args.data_path, args.dataset_size)
+        elif args.dataset == 'srml2018':
+            dataset = ds.SRML2018(args.data_path, args.dataset_size)
         elif args.dataset == 'sp0c20':
             dataset = ds.Sp0c20(args.data_path, args.time_samples, args.dataset_size)
         else:
@@ -56,6 +58,8 @@ def get_classes(dataset):
             "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
             'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
         )
+    elif dataset == 'srml2018':
+        return ds.RML2018.classes
     else:
         raise NotImplementedError(f"dataset not implemented: {dataset}")
 

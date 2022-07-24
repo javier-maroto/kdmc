@@ -308,89 +308,52 @@ class SRML2018(Synthetic):
     """Synthetic dataset with basic parameters"""
 
     classes = (
-        "B-FM",
-        "DSB-AM",
-        "SSB-AM",
-        "CPFSK",
-        "GFSK",
-        "PAM4",
         "BPSK",
         "QPSK",
         "8-PSK",
+        "16-PSK",
+        "32-PSK",
+        "16-APSK",
+        "32-APSK",
+        "64-APSK",
+        "128-APSK",
         "16-QAM",
-        "64-QAM"
+        "32-QAM",
+        "64-QAM",
+        "128-QAM",
+        "256-QAM"
     )
     filename = "srml2018.mat"
     time_samples = 1024
 
     def __init__(self, raw_path, dataset_size=None):
-        super().__init__(raw_path, None, dataset_size)
+        super(Dataset).__init__()
+        self.data_path = raw_path.joinpath(self.folder)
+        self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
+        self.iq, self.rx_s, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs, self.channel = self.load()
+        self.len = self.iq.shape[0]
     
     def load(self, dataset_size=None):
-        data = scipy.io.loadmat(self.data_path.joinpath(self.filename))
+        import h5py
+        with h5py.File(self.filename, 'r') as f:
+            rx_x = f['rx_x'][:]
+            rx_x = np.swapaxes(rx_x, 0, 2)
+            tx_s = f['tx_s'][:]
+            tx_s = np.swapaxes(tx_s, 0, 2)
+            rx_s = f['rx_s'][:]
+            rx_s = np.swapaxes(rx_s, 0, 2)
+            y = f['y'][:]
+            y = np.swapaxes(y, 0, 1)
 
-        rx_x = data['rx_x']
-        rx_x = rx_x[..., :self.time_samples]
-        rx_x = np.stack([rx_x.real, rx_x.imag], axis=1)
-        rx_x = rx_x.astype(np.float32)
+            modulation = np.argmax(y, axis=1)
 
-        tx_s = data['tx_s']
-        rx_s = data['rx_s']
-        y = data['y']
+            snr = f['snrs'][:]
+            sps = f['lsps'][:]
+            rolloff = f['rolloffs'][:]
+            fs = f['fss'][:]
+            channel = f['rays'][:]
+        snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
+        return rx_x, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs, channel
 
-        modulation = data['modulations']
-        modulation = np.array([self.class_to_idx[mod] for mod in modulation])
-
-        snr = data['snrs']
-        sps = data['lsps']
-        rolloff = data['rolloffs']
-        fs = data['fss']
-        channel = data['rays']
-        
-        yp = scipy.io.loadmat(self.data_path.joinpath("y", path))['y'][idxs]
-        yp = yp[:, self.reorder]
-        y.append(yp)
-        # Load sps
-        sps = df1['sps']
-        sps_list.append(np.full(data.shape[0], sps))
-        # Load rolloff
-        rolloff = df1['rolloff']
-        rolloff_list.append(np.full(data.shape[0], rolloff))
-        # Load fs
-        fs = df1['fs']
-        fs_list.append(np.full(data.shape[0], fs))
-        # Load snr
-        snr_i = df1['snr']
-        snr.append(np.full(data.shape[0], snr_i))
-        if mod in ['GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM','OQPSK']:
-            snr_filt.append(np.full(x.shape[0], np.nan))
-            rx_s.append(np.full_like(x, np.nan))
-        else:
-            # Load rx_s and tx_s
-            data = scipy.io.loadmat(self.data_path.joinpath("rx_s", path))["rx_s"][idxs]
-            data = np.stack([data.real, data.imag], axis=1)
-            rs = data.astype(np.float32)
-            data = scipy.io.loadmat(self.data_path.joinpath("tx_s", path))["tx_s"][idxs]
-            data = np.stack([data.real, data.imag], axis=1)
-            ts = data.astype(np.float32)
-            snr_filt.append(self.compute_snr(ts, rs - ts))
-            rs_extended = np.zeros_like(x)
-            n_symb = int(x.shape[-1] / sps)
-            rs_extended[..., :n_symb] = rs[..., :n_symb]
-            rx_s.append(rs_extended)
-
-        modulation = np.concatenate(modulation, axis=0, dtype=np.int64)
-        snr = np.concatenate(snr, axis=0)
-        rx_x = np.concatenate(rx_x, axis=0)
-        rx_s = np.concatenate(rx_s, axis=0)
-        y = np.concatenate(y, axis=0, dtype=np.float32)
-        sps = np.concatenate(sps_list, axis=0)
-        rolloff = np.concatenate(rolloff_list, axis=0)
-        fs = np.concatenate(fs_list, axis=0)
-        snr_filt = np.concatenate(snr_filt, axis=0)
-        
-        assert y.shape[0] == snr_filt.shape[0], (y.shape, snr_filt.shape)
-        np.savez(
-            self.data_path.joinpath(self.filename),
-            iq=rx_x, rx_s=rx_s, modulation=modulation, y=y, snr=snr, snr_filt=snr_filt,
-            sps=sps, rolloff=rolloff, fs=fs)
+    def filter_paths(self, df_path):
+        pass
