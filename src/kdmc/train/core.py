@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
-from kdmc.train.at import ATTrainer, LNRATTrainer, MLATTrainer
+from kdmc.train.at import ATTrainer, LNRATTrainer, MLATTrainer, SelfMLATTrainer
 from kdmc.train.base import MLTrainer
 from kdmc.train.rslad import RSLADTrainer
 from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, STDTrainer, SelfMLSTDTrainer
@@ -65,6 +65,8 @@ def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_up
         return MLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_ml':
         return MLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_sml':
+        return SelfMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'std_lnr':
         return LNRSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_lnr':
