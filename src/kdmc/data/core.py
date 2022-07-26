@@ -5,11 +5,17 @@ from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 from kdmc.data.s1024 import get_s1024_datasets
 from kdmc.data.sbasic_nf import get_sbasic_datasets
 import kdmc.data.synthetic as ds
+from kdmc.data.rml2018 import get_rml2018_datasets, RML2018_D
+from kdmc.data.rml2018r import get_rml2018r_datasets
 
 
 def get_datasets(args):
     if args.dataset == 'rml2016.10a':
         return get_rml2016_10a_datasets(args.data_path)
+    elif args.dataset == 'rml2018':
+        return get_rml2018_datasets(args.data_path)
+    elif args.dataset == 'rml2018r':
+        return get_rml2018r_datasets(args.data_path)
     elif args.dataset == 's1024':
         return get_s1024_datasets(args.data_path)
     elif args.dataset == 'sbasic_nf':
@@ -58,8 +64,10 @@ def get_classes(dataset):
             "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
             'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
         )
-    elif dataset == 'srml2018':
-        return ds.RML2018.classes
+    elif dataset in ('srml2018', 'rml2018r'):
+        return ds.SRML2018.classes
+    elif dataset == 'rml2018':
+        return RML2018_D.classes
     else:
         raise NotImplementedError(f"dataset not implemented: {dataset}")
 

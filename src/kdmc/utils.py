@@ -55,3 +55,15 @@ def _reporthook(t):
         last_b[0] = b
 
     return inner
+
+
+def compute_sample_energy(x):
+    """Computes the mean energy of the signal (or batch of signals) samples
+
+    Args:
+        x (torch.Tensor): IQ signal ('batch', 'time', 'iq')
+
+    Returns:
+        torch.Tensor: energy with same number of dimensions, only first of size not 1 (batch)
+    """
+    return (x ** 2).sum(-2).mean(-1)

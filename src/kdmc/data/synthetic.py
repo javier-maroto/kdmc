@@ -11,6 +11,8 @@ from torch.utils.data import Dataset, Subset
 
 from abc import abstractmethod, ABC
 
+from kdmc.utils import compute_sample_energy
+
 
 def split_synthetic_dataset(dataset, seed=0):
     """Split the synthetic dataset"""
@@ -335,23 +337,28 @@ class SRML2018(Synthetic):
     
     def load(self, dataset_size=None):
         import h5py
-        with h5py.File(self.filename, 'r') as f:
+        with h5py.File(self.data_path.joinpath(self.filename), 'r') as f:
             rx_x = f['rx_x'][:]
             rx_x = np.swapaxes(rx_x, 0, 2)
+            rx_x = rx_x.astype(np.float32)
+            # Normalize rx_x
+            rx_x = rx_x / compute_sample_energy(rx_x)[:, np.newaxis, np.newaxis]
             tx_s = f['tx_s'][:]
             tx_s = np.swapaxes(tx_s, 0, 2)
             rx_s = f['rx_s'][:]
             rx_s = np.swapaxes(rx_s, 0, 2)
             y = f['y'][:]
             y = np.swapaxes(y, 0, 1)
+            y = y.astype(np.float32)
 
             modulation = np.argmax(y, axis=1)
+            modulation = modulation.astype(np.int64)
 
-            snr = f['snrs'][:]
-            sps = f['lsps'][:]
-            rolloff = f['rolloffs'][:]
-            fs = f['fss'][:]
-            channel = f['rays'][:]
+            snr = np.squeeze(f['snrs'][:])
+            sps = np.squeeze(f['lsps'][:])
+            rolloff = np.squeeze(f['rolloffs'][:])
+            fs = np.squeeze(f['fss'][:])
+            channel = np.squeeze(f['rays'][:])
         snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
         return rx_x, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs, channel
 
