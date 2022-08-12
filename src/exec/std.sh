@@ -17,3 +17,6 @@ python src/main.py --dataset sbasic_nf --loss std --n_epochs 100 --sch_gamma 0.9
 
 python src/main.py --dataset sbasic_nf --loss at --n_epochs 100 --sch_gamma 0.95 --id at --time_samples 128
 python src/main.py --dataset sbasic_nf --loss at --n_epochs 100 --sch_gamma 0.95 --id at_ml --time_samples 128 --return_ml
+
+# Run synthetic RML2018 dataset
+python src/main.py --dataset srml2018 --loss std --n_epochs 100 --sch_gamma 0.95 --id std --batch_size 1024 --seed 0 --data_path /media/javier/Data/Datasets 

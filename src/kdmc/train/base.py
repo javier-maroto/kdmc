@@ -39,7 +39,7 @@ class Trainer(abc.ABC):
         self.classes = get_classes(self.dataset)
         
         self.ml_preds = None
-        if self.dataset not in ('rml2016.10a', 'rml2018', 'rml2018r'):
+        if (self.dataset not in ('rml2016.10a', 'rml2018', 'rml2018r')) and args.test_ml:
             self.ml_preds = torch.zeros(
                 [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
                 device=self.device)

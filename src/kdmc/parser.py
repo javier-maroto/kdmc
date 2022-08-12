@@ -11,6 +11,7 @@ def parse_args(args=None):
     parser.add_argument('--resume', '-r', type=str, help='resume from checkpoint')
     parser.add_argument('--arch', default='resnet', choices=['resnet'], help='Target model architecture')
     parser.add_argument('--profile', action='store_true', help='Profile the model')
+    parser.add_argument('--test_ml', action='store_true', help='Test over ml predictions')
     parser.add_argument('--saved_model', type=str, help='Path to model to load')
     # Path parameters
     parser.add_argument('--root_path', default='.')
@@ -47,6 +48,7 @@ def parse_args(args=None):
     
     args =  parser.parse_args(args)
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print('Using device: {}'.format(args.device))
     args.root_path = Path(args.root_path)
     # If None, data is in the same root folder
     if args.data_path is None:
