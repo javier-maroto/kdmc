@@ -12,6 +12,7 @@ def parse_args(args=None):
     parser.add_argument('--arch', default='resnet', choices=['resnet'], help='Target model architecture')
     parser.add_argument('--profile', action='store_true', help='Profile the model')
     parser.add_argument('--saved_model', type=str, help='Path to model to load')
+    parser.add_argument('--debug', action='store_true', help='Debug mode')
     # Path parameters
     parser.add_argument('--root_path', default='.')
     parser.add_argument('--data_path')

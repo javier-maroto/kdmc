@@ -66,4 +66,4 @@ def compute_sample_energy(x):
     Returns:
         torch.Tensor: energy with same number of dimensions, only first of size not 1 (batch)
     """
-    return (x ** 2).sum(-2).mean(-1)
+    return (x ** 2).sum(-2).mean(-1) ** (1 / 2)

@@ -1,11 +1,16 @@
+from datetime import datetime
+import os
 import random
 import numpy as np
 import torch
 import wandb
-from kdmc.data.core import create_dataloaders, get_datasets
+from kdmc.data.core import create_dataloaders, get_classes, get_datasets
 
 from kdmc.parser import parse_args
-from kdmc.train.core import create_model, get_trainer
+from kdmc.test import FullTester
+from kdmc.train.core import create_model
+
+import logging
 
 
 def main():
@@ -15,15 +20,20 @@ def main():
     wandb.init(project=f"kdmc_{args.dataset}", name=args.id)
     wandb.config.update(args)
 
+    os.makedirs('logs', exist_ok=True)
+    loglevel = logging.DEBUG if args.debug else logging.INFO
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    logging.basicConfig(level=loglevel, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S', filename=f'logs/{now}_{args.id}.log')
+
     # Seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
 
     # Data
-    print('==> Preparing data..')
+    logging.info('==> Preparing data..')
     trainset, testset = get_datasets(args)
-    trainloader, testloader = create_dataloaders(args, trainset, testset)
+    _, testloader = create_dataloaders(args, trainset, testset)
     args.time_samples = trainset.dataset.time_samples
 
     # Model
@@ -37,8 +47,9 @@ def main():
     net.to(args.device)
     net.eval()
 
-    trainer = get_trainer(args, net, trainloader, testloader, None, None, None, args.save_freq)
-    trainer.test()
+    classes = get_classes(args.dataset)
+    tester = FullTester(args, net, classes)
+    tester.test(testloader)
 
 
 if __name__ == "__main__":
