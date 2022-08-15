@@ -336,7 +336,7 @@ class SRML2018(Synthetic):
 
     def load(self, dataset_size=None):
         import h5py
-        with h5py.File(self.data_path.joinpath(self.filename), 'r') as f:
+        with h5py.File(self.data_path.joinpath(self.filename), 'r', rdcc_nbytes=1024**2*4000, rdcc_w0=1) as f:
             snr = np.squeeze(f['snrs'][:])
             rx_x = f['rx_x'][:]
             rx_x = np.swapaxes(rx_x, 0, 2)
