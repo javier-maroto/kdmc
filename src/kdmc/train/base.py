@@ -9,7 +9,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import wandb
 import torch.nn.functional as F
-from kdmc.attack.core import SPR_Attack
+from kdmc.attack.core import SPR_Attack, parse_attack
 
 from kdmc.attack.pgd import PGD
 from kdmc.data.core import get_classes, get_num_classes
@@ -21,6 +21,7 @@ from kdmc.train.testing import get_acc_metrics, get_acc_metrics_wo_ml, measure_c
 class Trainer(abc.ABC):
 
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
+        self.args = args
         self.id = args.id
         self.seed = args.seed
         self.arch = args.arch
@@ -39,11 +40,12 @@ class Trainer(abc.ABC):
         self.classes = get_classes(self.dataset)
         
         self.ml_preds = None
-        if (self.dataset not in ('rml2016.10a', 'rml2018', 'rml2018r')) and args.test_ml:
+        if (self.dataset not in ('rml2016.10a', 'rml2018', 'rml2018r')):
             self.ml_preds = torch.zeros(
                 [len(self.train_dl.dataset) + len(self.test_dl.dataset), get_num_classes(self.dataset)],
                 device=self.device)
-            self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
+            if args.test_ml:
+                self.ml_preds = self.get_ml_preds(self.test_dl, self.ml_preds)
             
         # Gradient clipping
         if args.grad_clip is not None:
@@ -73,32 +75,30 @@ class Trainer(abc.ABC):
                 ml_preds[idx] = ml_preds_
         return ml_preds
 
-    def get_adv_ml_preds(self, batch, x_adv):
-        ml_model = MaxLikelihoodModel(
-            self.data_path.joinpath('synthetic/signal/states'), self.classes, device=self.device)
-        sps = batch['sps']
-        rolloff = batch['rolloff']
-        n_span_symb = 8
-        target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
-        ml_preds = torch.zeros([x_adv.shape[0], get_num_classes(self.dataset)], device=self.device)
-        for a in sps.unique():
-            for b in rolloff.unique():
-                mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
+    def get_adv_ml_preds(self, dl, ml_preds):
+        states_path = self.data_path.joinpath('synthetic/signal/states')
+        ml_model = MaxLikelihoodModel(states_path, self.classes, device=self.device)
+        print('Computing ML predictions')
+        for batch in tqdm(dl):
+            sps = batch['sps']
+            idx = batch['idx'].to(self.device, dtype=torch.long)
+            ml_preds[idx] = batch['y'].to(self.device)
+            target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
+            for a in sps.unique():
+                mask = ((sps == a) & target_mask).to(self.device)
                 if mask.sum() == 0:
                     continue
-                x = batch['x'][mask].to(self.device)
+                x = batch['x_ml'][mask].to(self.device)
                 snr_ml = batch['snr_filt'][mask].to(self.device)
                 y = batch['y'][mask].to(self.device)
+                idx = batch['idx'][mask].to(self.device, dtype=torch.long)
                 ls = a.numpy().astype(np.int)
-                rf = b.numpy()
-                while ls * n_span_symb >= x.shape[-1]:
-                    n_span_symb //= 2
-                ml_model.create_filter(Ls=ls, rolloff=rf, n_span_symb=n_span_symb)
-                ml_preds_ = ml_model.compute_advml(x, x_adv[mask], snr_ml)
+                ml_net = ml_model.return_ml_model(snr_ml)
+                atk = parse_attack(ml_net, self.args.atk)
+                x_adv = atk(x, y, snr_ml)
+                ml_preds_ = ml_model.compute_ml_symb(x_adv, snr_ml, sps=ls)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
-                ml_preds[mask] = ml_preds_
-        y = batch['y'][~target_mask].to(self.device)
-        ml_preds[~target_mask] = y
+                ml_preds[idx] = ml_preds_
         return ml_preds
 
     def loop_fast(self, epoch):
@@ -138,10 +138,10 @@ class Trainer(abc.ABC):
                 total += targets.size(0)
                 correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
                 # Compute ML accuracy
-                if self.ml_preds is not None:
+                if self.args.test_ml:
                     ml_preds = self.ml_preds[idx]
                     correct['clean_ml'] += predicted.eq(ml_preds.argmax(1)).sum().item()
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             wandb.log({'test.acc_ml': 100.*correct['clean_ml']/total}, commit=False)
         wandb.log({
             'test.acc': 100.*correct['clean']/total,
@@ -170,7 +170,7 @@ class Trainer(abc.ABC):
                 total += targets.size(0)
                 correct['clean'] += predicted.eq(targets.argmax(1)).sum().item()
                 # Compute ML accuracy
-                if self.ml_preds is not None:
+                if self.args.test_ml:
                     ml_preds = self.ml_preds[idx]
                     ml_correct['clean'] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
@@ -181,15 +181,15 @@ class Trainer(abc.ABC):
                     _, predicted = outputs.max(1)
                     correct[key] += predicted.eq(targets.argmax(1)).sum().item()
                     # Compute ML accuracy
-                    if self.ml_preds is not None:
+                    if self.args.test_ml:
                         ml_preds = self.get_adv_ml_preds(batch, x_adv)
                         ml_correct[key] += predicted.eq(ml_preds.argmax(1)).sum().item()
 
         log_dict = {f'test.{key}_acc': 100.*correct[key]/total for key in slow_atks}
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             log_dict.update({f'test.{key}_acc_ml': 100.*ml_correct[key]/total for key in slow_atks})
         wandb.log(log_dict, commit=False)
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             wandb.log({'test.acc_ml': 100.*ml_correct['clean']/total}, commit=False)
         wandb.log({
             'test.acc': 100.*correct['clean']/total,
@@ -202,13 +202,13 @@ class Trainer(abc.ABC):
         
         self.net.eval()
         res = {'true': [], 'clean': [], 'snr': []}
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             res['clean_ml'] = []
         total = 0
         atks = self.get_test_attacks()
         for key in atks:
             res[key] = []
-            if self.ml_preds is not None:
+            if self.args.test_ml:
                 res[f'{key}_ml'] = []
         #res.update(self.get_geometric_metrics())
         with torch.no_grad():
@@ -222,7 +222,7 @@ class Trainer(abc.ABC):
                 res['true'].extend(batch['y'].argmax(1).numpy())
                 res['clean'].extend(predicted.cpu().numpy())
                 res['snr'].extend(batch['snr'].numpy())
-                if self.ml_preds is not None:
+                if self.args.test_ml:
                     ml_preds = self.ml_preds[idx]
                     res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
 
@@ -232,13 +232,13 @@ class Trainer(abc.ABC):
                     outputs = self.net(x_adv)
                     predicted = outputs.argmax(1)
                     res[key].extend(predicted.cpu().numpy())
-                    if self.ml_preds is not None:
+                    if self.args.test_ml:
                         ml_preds = self.get_adv_ml_preds(batch, x_adv)
                         res[f'{key}_ml'].extend(ml_preds.argmax(1).cpu().numpy())
         for key, value in res.items():
             res[key] = np.array(value)
         df = pd.DataFrame(res)
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             gam = get_acc_metrics
         else:
             gam = get_acc_metrics_wo_ml
@@ -409,7 +409,7 @@ class MLTrainer(Trainer):
         ml = MaxLikelihoodModel(
             self.data_path.joinpath('synthetic/signal/states'), self.classes, device=self.device)
         res = {'true': [], 'clean': [], 'pgd-7_20dB': [], 'snr': []}
-        if self.ml_preds is not None:
+        if self.args.test_ml:
             res['clean_ml'] = []
         total = 0
         #res.update(self.get_geometric_metrics())
@@ -423,7 +423,7 @@ class MLTrainer(Trainer):
                 res['true'].extend(batch['y'].argmax(1).numpy())
                 res['clean'].extend(predicted.cpu().numpy())
                 res['snr'].extend(batch['snr'].numpy())
-                if self.ml_preds is not None:
+                if self.args.test_ml:
                     ml_preds = self.ml_preds[idx]
                     res['clean_ml'].extend(ml_preds.argmax(1).cpu().numpy())
                 snr_ml = batch['snr_filt'].to(self.device)

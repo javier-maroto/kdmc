@@ -133,18 +133,7 @@ class MaxLikelihoodModel:
         ml_preds = F.softmax(likelihood, dim=-1)
         return ml_preds
 
-    def compute_ml_symb(self, x, snr, sps=1) -> torch.Tensor:
-        """Constructs the likelihood function for the given SNR and samples per symbol.
-        Only valid for the supported modulations.
-
-        Args:
-            x (torch.Tensor): signal received. Shape: (batch_size, IQ, time_samples)
-            snr (float): SNR in dB.
-        
-        Returns:
-            torch.Tensor: likelihood values ()
-        """
-        x = x[..., :(x.shape[-1] // sps)]
+    def forward_symb(self, x, snr):
         N0 = 10 ** (-snr/20)
         sigma = N0 / np.sqrt(2)
         Ks = -torch.log(2 * torch.pi * sigma ** 2).view(-1, 1)
@@ -158,6 +147,21 @@ class MaxLikelihoodModel:
                 distances[..., i] = torch.sum((x - s) ** 2, dim=1)
             likelihood_sample = torch.logsumexp(-distances / (2 * sigma.view(-1, 1, 1) ** 2), dim=-1) + Ks + Km
             likelihood[:, j] = torch.sum(likelihood_sample, dim=-1)
+        return likelihood
+
+    def compute_ml_symb(self, x, snr, sps=1) -> torch.Tensor:
+        """Constructs the likelihood function for the given SNR and samples per symbol.
+        Only valid for the supported modulations.
+
+        Args:
+            x (torch.Tensor): signal received. Shape: (batch_size, IQ, time_samples)
+            snr (float): SNR in dB.
+        
+        Returns:
+            torch.Tensor: likelihood values ()
+        """
+        x = x[..., :(x.shape[-1] // sps)]
+        likelihood = self.forward_symb(x, snr)
         ml_preds = F.softmax(likelihood, dim=-1)
         return ml_preds
 
@@ -214,6 +218,8 @@ class MaxLikelihoodModel:
     def return_ml_model(self, snr=None):
         """Returns the model.
         """
+        fwd = self.forward_symb
+        
         class MLModel(nn.Module):
             def __init__(self, ml_model, snr=None):
                 super().__init__()
@@ -226,24 +232,7 @@ class MaxLikelihoodModel:
                 self.dummy = nn.Parameter(torch.zeros(1, device=self.device))
 
             def forward(self, x):
-                #x = torch.conv1d(x, self.h, groups=2)
-                # Downsample
-                #x = x[..., ::self.Ls]
-                N0 = 10 ** (-self.snr/20)
-                sigma = N0 / np.sqrt(2)
-                Ks = -torch.log(2 * torch.pi * sigma ** 2).view(-1, 1)
-                likelihood = torch.zeros(x.shape[0], len(self.states_dict), device=self.device)
-                for j, mod_states in self.states_dict.items():
-                    M = len(mod_states)
-                    Km = -np.log(M)
-                    distances = torch.zeros((x.shape[0], x.shape[2], M), device=self.device)
-                    for i, state in enumerate(mod_states):
-                        s = state.view([1, -1, 1])
-                        distances[..., i] = torch.sum((x - s) ** 2, dim=1)
-                    likelihood_sample = torch.logsumexp(-distances / (2 * sigma.view(-1, 1, 1) ** 2), dim=-1) + Ks + Km
-                    likelihood[:, j] = torch.sum(likelihood_sample, dim=-1)
-                ml_preds = F.softmax(likelihood, dim=-1)
-                return ml_preds
+                fwd(x, self.snr)
         
         return MLModel(self, snr)
             

@@ -70,7 +70,6 @@ class Synthetic(Dataset, ABC):
         self.iq, self.rx_s, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs = self.load()
         self.len = self.iq.shape[0]
         
-
     def compute_snr(self, signal, noise):
         """Computes the SNR of one/multiple signal (assumes last two dimensions are the 
         iq channels and time samples)"""
