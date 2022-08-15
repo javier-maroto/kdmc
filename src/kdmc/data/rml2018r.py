@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, Subset
 
 import tables
 
-from kdmc.utils import _reporthook
+from kdmc.utils import _reporthook, compute_sample_energy
 
 
 def get_rml2018r_datasets(path, time_samples=None, return_idxs=False, seed=0):
@@ -99,6 +99,7 @@ https://cyclostationary.blog/2020/09/24/deepsigs-2018-data-set-2018-01-osc-0001_
             iq = f.get_node("/", "X")[:]
         snr = np.squeeze(snr)[mask]
         iq = np.swapaxes(iq, -1, -2)[mask][..., :self.time_samples]
+        iq = iq / compute_sample_energy(iq)[:, np.newaxis, np.newaxis]
         y = y.astype(np.float32)
         
         return iq, modulation, y, snr

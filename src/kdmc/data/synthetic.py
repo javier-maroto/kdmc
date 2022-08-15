@@ -334,10 +334,11 @@ class SRML2018(Synthetic):
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
         self.iq, self.rx_s, self.modulation, self.y, self.snr, self.snr_filt, self.sps, self.rolloff, self.fs, self.channel = self.load()
         self.len = self.iq.shape[0]
-    
+
     def load(self, dataset_size=None):
         import h5py
         with h5py.File(self.data_path.joinpath(self.filename), 'r') as f:
+            snr = np.squeeze(f['snrs'][:])
             rx_x = f['rx_x'][:]
             rx_x = np.swapaxes(rx_x, 0, 2)
             rx_x = rx_x.astype(np.float32)
@@ -354,12 +355,81 @@ class SRML2018(Synthetic):
             modulation = np.argmax(y, axis=1)
             modulation = modulation.astype(np.int64)
 
-            snr = np.squeeze(f['snrs'][:])
             sps = np.squeeze(f['lsps'][:])
             rolloff = np.squeeze(f['rolloffs'][:])
             fs = np.squeeze(f['fss'][:])
             channel = np.squeeze(f['rays'][:])
         snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
+        return rx_x, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs, channel
+
+    def load_filt(self, dataset_size=None):
+        import h5py
+        with h5py.File(self.data_path.joinpath(self.filename), 'r') as f:
+            snr = np.squeeze(f['snrs'][:])
+            idxs = np.arange(len(snr))
+            idxs = idxs[snr >= 0]
+            snr = snr[idxs]
+
+            rx_x = f['rx_x'][:]
+            rx_x = np.swapaxes(rx_x, 0, 2)
+            rx_x = rx_x[idxs]
+            rx_x = rx_x.astype(np.float32)
+            # Normalize rx_x
+            rx_x = rx_x / compute_sample_energy(rx_x)[:, np.newaxis, np.newaxis]
+            tx_s = f['tx_s'][:]
+            tx_s = np.swapaxes(tx_s, 0, 2)
+            tx_s = tx_s[idxs]
+            rx_s = f['rx_s'][:]
+            rx_s = np.swapaxes(rx_s, 0, 2)
+            rx_s = rx_s[idxs]
+            y = f['y'][:]
+            y = np.swapaxes(y, 0, 1)
+            y = y[idxs]
+            y = y.astype(np.float32)
+
+            modulation = np.argmax(y, axis=1)
+            modulation = modulation.astype(np.int64)
+
+            sps = np.squeeze(f['lsps'][:])
+            rolloff = np.squeeze(f['rolloffs'][:])
+            fs = np.squeeze(f['fss'][:])
+            channel = np.squeeze(f['rays'][:])
+
+            sps = sps[idxs]
+            rolloff = rolloff[idxs]
+            fs = fs[idxs]
+            channel = channel[idxs]
+        snr_filt = self.compute_snr(tx_s, rx_s - tx_s)
+        return rx_x, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs, channel
+
+    def load_fsnr(self, dataset_size=None):
+        import h5py
+        with h5py.File(self.data_path.joinpath(self.filename), 'r') as f:
+            snr = np.squeeze(f['snrs'][:])
+            idxs = np.arange(len(snr))
+            idxs = idxs[snr >= 0]
+            rx_x = f['rx_x'][:]
+            rx_x = np.swapaxes(rx_x, 0, 2)
+            rx_x = rx_x[idxs]
+            rx_x = rx_x.astype(np.float32)
+            # Normalize rx_x
+            rx_x = rx_x / compute_sample_energy(rx_x)[:, np.newaxis, np.newaxis]
+            rx_s = f['rx_s'][:]
+            rx_s = np.swapaxes(rx_s, 0, 2)
+            rx_s = rx_s[idxs]
+            y = f['y'][:]
+            y = np.swapaxes(y, 0, 1)
+            y = y[idxs]
+            y = y.astype(np.float32)
+
+            modulation = np.argmax(y, axis=1)
+            modulation = modulation.astype(np.int64)
+
+            sps = np.squeeze(f['lsps'][:])
+            rolloff = np.squeeze(f['rolloffs'][:])
+            fs = np.squeeze(f['fss'][:])
+            channel = np.squeeze(f['rays'][:])
+            snr_filt = np.squeeze(f['snrs_filt'][:])
         return rx_x, rx_s, modulation, y, snr, snr_filt, sps, rolloff, fs, channel
 
     def filter_paths(self, df_path):

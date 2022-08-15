@@ -1,16 +1,12 @@
-python src/main_test.py --dataset sawgn --saved_model sbasic/resnet/std/0/ckpt_last.pth --id std-b-a
-python src/main_test.py --dataset sawgn2p --saved_model sbasic/resnet/std/0/ckpt_last.pth --id std-b-a2
-python src/main_test.py --dataset sawgn --saved_model sbasic/resnet/std_ml/0/ckpt_last.pth --id std_ml-b-a
-python src/main_test.py --dataset sawgn2p --saved_model sbasic/resnet/std_ml/0/ckpt_last.pth --id std_ml-b-a2
+#python src/main_test.py --dataset rml2018r --saved_model rml2018r/resnet/std/0/ckpt_last.pth --id std-r-r --debug
+#python src/main_test.py --dataset rml2018r --saved_model srml2018/resnet/std/0/ckpt_last.pth --id std-s-r
+#python src/main_test.py --dataset rml2018r --saved_model srml2018/resnet/std_ml/0/ckpt_last.pth --id std_ml-s-r
 
-python src/main_test.py --dataset sbasic --saved_model sawgn/resnet/std/0/ckpt_last.pth --id std-a-b
-python src/main_test.py --dataset sawgn2p --saved_model sawgn/resnet/std/0/ckpt_last.pth --id std-a-a2
-python src/main_test.py --dataset sbasic --saved_model sawgn/resnet/std_ml/0/ckpt_last.pth --id std_ml-a-b
-python src/main_test.py --dataset sawgn2p --saved_model sawgn/resnet/std_ml/0/ckpt_last.pth --id std_ml-a-a2
+#python src/main_test.py --dataset srml2018 --saved_model srml2018/resnet/std/0/ckpt_last.pth --id std-s-s --debug
+#python src/main_test.py --dataset srml2018 --saved_model rml2018r/resnet/std/0/ckpt_last.pth --id std-r-s --debug
 
-python src/main_test.py --dataset sbasic --saved_model sawgn2p/resnet/std/0/ckpt_last.pth --id std-a2-b
-python src/main_test.py --dataset sawgn --saved_model sawgn2p/resnet/std/0/ckpt_last.pth --id std-a2-a
-python src/main_test.py --dataset sbasic --saved_model sawgn2p/resnet/std_ml/0/ckpt_last.pth --id std_ml-a2-b
-python src/main_test.py --dataset sawgn --saved_model sawgn2p/resnet/std_ml/0/ckpt_last.pth --id std_ml-a2-a
-python src/main_test.py --dataset sbasic --saved_model sawgn2p/resnet/std_hd90/0/ckpt_last.pth --id std_hd90-a2-b
-python src/main_test.py --dataset sawgn --saved_model sawgn2p/resnet/std_hd90/0/ckpt_last.pth --id std_hd90-a2-a
+for seed in {0..3}
+do
+python src/main.py --dataset srml2018 --loss std --n_epochs 100 --sch_gamma 0.95 --id std --batch_size 1024 --seed $seed
+python src/main.py --dataset srml2018 --loss std_ml --n_epochs 100 --sch_gamma 0.95 --id std_ml --batch_size 1024 --seed $seed
+done
