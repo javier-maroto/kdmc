@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, Subset
 
 import tables
+from kdmc.data.utils import SubsetDataset
 
 from kdmc.utils import _reporthook, compute_sample_energy
 
@@ -27,8 +28,8 @@ def get_rml2018r_datasets(path, time_samples=None, return_idxs=False, seed=0):
         random_state=seed,
         stratify=groups,
     )
-    trainset = Subset(full, train_idxs)
-    testset = Subset(full, test_idxs)
+    trainset = SubsetDataset(full, train_idxs)
+    testset = SubsetDataset(full, test_idxs)
 
     return trainset, testset
 

@@ -7,9 +7,10 @@ from urllib.request import urlretrieve
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset
 
 import tables
+from kdmc.data.utils import SubsetDataset
 
 from kdmc.utils import _reporthook
 
@@ -27,8 +28,8 @@ def get_rml2018_datasets(path, time_samples=None, return_idxs=False, seed=0):
         random_state=seed,
         stratify=groups,
     )
-    trainset = Subset(full, train_idxs)
-    testset = Subset(full, test_idxs)
+    trainset = SubsetDataset(full, train_idxs)
+    testset = SubsetDataset(full, test_idxs)
 
     return trainset, testset
 

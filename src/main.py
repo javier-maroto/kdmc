@@ -27,7 +27,7 @@ def main():
     print('==> Preparing data..')
     trainset, testset = get_datasets(args)
     trainloader, testloader = create_dataloaders(args, trainset, testset)
-    args.time_samples = trainset.dataset.time_samples
+    args.time_samples = trainset.time_samples
 
     # Model
     print('==> Building model..')

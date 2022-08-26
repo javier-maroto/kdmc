@@ -95,7 +95,8 @@ class Trainer(abc.ABC):
                 ls = a.numpy().astype(np.int)
                 ml_net = ml_model.return_ml_model(snr_ml)
                 atk = parse_attack(ml_net, self.args.atk)
-                x_adv = atk(x, y, snr_ml)
+                y_int = y.argmax(dim=1)
+                x_adv = atk(x, y_int, snr_ml)
                 ml_preds_ = ml_model.compute_ml_symb(x_adv, snr_ml, sps=ls)
                 ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
                 ml_preds[idx] = ml_preds_

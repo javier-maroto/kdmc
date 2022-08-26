@@ -26,10 +26,25 @@ class IndexableDataset(Dataset):
         return len(self.dataset)
 
 
+class SubsetDataset(Dataset):
+    def __init__(self, dataset, indices):
+        self.dataset = dataset
+        self.indices = indices
+        self.time_samples = dataset.time_samples
+
+    def __getitem__(self, idx):
+        if isinstance(idx, list):
+            return self.dataset[[self.indices[i] for i in idx]]
+        return self.dataset[self.indices[idx]]
+
+    def __len__(self):
+        return len(self.indices)
+
+
 class DatasetMixer(Dataset):
     def __init__(self, datasets, mix_weights):
         assert len(datasets) == len(mix_weights)
-        self.timesamples = datasets[0].dataset.timesamples
+        self.time_samples = datasets[0].time_samples
         datasets = [Subset(d, np.random.choice(len(d), size=int(len(d)*w))) for d, w in zip(datasets, mix_weights)]
         self.dataset = ConcatDataset(datasets)
 

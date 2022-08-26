@@ -7,9 +7,10 @@ from tqdm import tqdm, trange
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset
 
 from abc import abstractmethod, ABC
+from kdmc.data.utils import SubsetDataset
 
 from kdmc.utils import compute_sample_energy
 
@@ -26,8 +27,8 @@ def split_synthetic_dataset(dataset, seed=0):
         random_state=seed,
         stratify=groups,
     )
-    trainset = Subset(dataset, train_idxs)
-    testset = Subset(dataset, test_idxs)
+    trainset = SubsetDataset(dataset, train_idxs)
+    testset = SubsetDataset(dataset, test_idxs)
 
     return trainset, testset
 

@@ -1,5 +1,5 @@
 import numpy as np
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
 from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 from kdmc.data.s1024 import get_s1024_datasets
@@ -7,26 +7,25 @@ from kdmc.data.sbasic_nf import get_sbasic_datasets
 import kdmc.data.synthetic as ds
 from kdmc.data.rml2018 import get_rml2018_datasets, RML2018_D
 from kdmc.data.rml2018r import get_rml2018r_datasets
-from .utils import DatasetMixer
+from .utils import DatasetMixer, SubsetDataset
 
 
 def get_datasets(args):
     if args.dataset == 'rml2016.10a':
-        return get_rml2016_10a_datasets(args.data_path)
+        train, test = get_rml2016_10a_datasets(args.data_path)
     elif args.dataset == 'rml2018':
-        return get_rml2018_datasets(args.data_path)
+        train, test = get_rml2018_datasets(args.data_path)
     elif args.dataset == 'rml2018r':
-        return get_rml2018r_datasets(args.data_path)
+        train, test = get_rml2018r_datasets(args.data_path)
     elif args.dataset == 's1024':
-        return get_s1024_datasets(args.data_path)
+        train, test = get_s1024_datasets(args.data_path)
     elif args.dataset == 'sbasic_nf':
-        return get_sbasic_datasets(args.data_path, args.time_samples, args.seed, use_filters=False)
+        train, test = get_sbasic_datasets(args.data_path, args.time_samples, args.seed, use_filters=False)
     elif args.dataset == 'sm_rml2018':  # Synthetic mix
-        real_train, real_test = get_rml2018r_datasets(args.data_path)
+        real_train, test = get_rml2018r_datasets(args.data_path)
         synth_dataset = ds.SRML2018(args.data_path, args.dataset_size)
-        synth_train, synth_test = ds.split_synthetic_dataset(synth_dataset, args.seed)
+        synth_train, _ = ds.split_synthetic_dataset(synth_dataset, args.seed)
         train = DatasetMixer([real_train, synth_train], [(1 - args.synth_weight), args.synth_weight])
-        return train, real_test
     else:
         if args.dataset == 'sbasic':
             dataset = ds.SAWGNp0c20(args.data_path, args.time_samples, args.dataset_size)
@@ -42,7 +41,8 @@ def get_datasets(args):
             dataset = ds.Sp0c20(args.data_path, args.time_samples, args.dataset_size)
         else:
             raise NotImplementedError(f"dataset not implemented: {args.dataset}")
-        return ds.split_synthetic_dataset(dataset, args.seed)
+        train, test = ds.split_synthetic_dataset(dataset, args.seed)
+    return train, test
     
 
 def get_num_classes(dataset):
@@ -71,7 +71,7 @@ def get_classes(dataset):
             "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM",
             'GFSK', 'CPFSK', 'B-FM', 'DSB-AM', 'SSB-AM', 'OQPSK'
         )
-    elif dataset in ('srml2018', 'rml2018r'):
+    elif dataset in ('srml2018', 'rml2018r', 'sm_rml2018'):
         return ds.SRML2018.classes
     elif dataset == 'rml2018':
         return RML2018_D.classes
@@ -86,7 +86,7 @@ def create_dataloaders(args, trainset, testset):
     if args.n_batches != -1:
         if args.n_batches * args.batch_size > len(trainset):
             raise ValueError(f"n_batches * batch_size > len(trainset)")
-        trainset = Subset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
+        trainset = SubsetDataset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
     trainloader = DataLoader(
         trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
     testloader = DataLoader(
