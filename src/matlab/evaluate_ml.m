@@ -1,3 +1,4 @@
+close all;
 tic
 
 spf = 1024;  % samples per frame
@@ -109,11 +110,16 @@ hold off
 figure;
 hold on
 
+
 x = snrs;
+[~, idxs] = sort(acc_ml_est(1,:), 'descend');
 for i = 1:length(modulationTypes)
-y1 = acc_ml_est(:, i);
-plot(x,y1)
+y1 = acc_ml_est(:, idxs(i));
+plot(x,y1,'DisplayName',string(modulationTypes(idxs(i))))
 end
-title('Combine Plots')
+legend
+title('Accuracy per class of maximum likelihood')
+xlabel('SNR') 
+ylabel('Accuracy') 
 
 hold off

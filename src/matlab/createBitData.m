@@ -18,9 +18,9 @@ switch modType
         src = @() randi([0 M-1],spf/sps,1);
     case {"8-PSK"}
         src = @() randi([0 M-1],spf/sps,1);
-    case {"16-QAM","16-APSK"}
+    case {"16-PSK","16-QAM","16-APSK"}
         src = @() randi([0 M-1],spf/sps,1);
-    case {"32-QAM","32-APSK"}
+    case {"32-PSK","32-QAM","32-APSK"}
         src = @() randi([0 M-1],spf/sps,1);
     case {"64-QAM","64-APSK"}
         src = @() randi([0 M-1],spf/sps,1);

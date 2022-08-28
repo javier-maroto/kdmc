@@ -1,0 +1,99 @@
+close all;
+
+fs = 0.2e6;
+mod = 2;
+
+
+rayChan1 = comm.RayleighChannel(...
+            'SampleRate',fs, ...
+            'PathDelays',0, ...
+            'AveragePathGains',0, ...
+            'NormalizePathGains',true, ...
+            'MaximumDopplerShift',0, ...
+            'DopplerSpectrum',doppler('Flat'), ...
+            'RandomStream','mt19937ar with seed', ...
+            'Seed',22, ...
+            'PathGainsOutputPort',true);
+
+rayChan2 = comm.RayleighChannel(...
+            'SampleRate',fs, ...
+            'PathDelays',[0 1.5]/fs, ...
+            'AveragePathGains',[2 3], ...
+            'NormalizePathGains',true, ...
+            'MaximumDopplerShift',0, ...
+            'DopplerSpectrum',{doppler('Gaussian',0.6),doppler('Flat')}, ...
+            'RandomStream','mt19937ar with seed', ...
+            'Seed',22, ...
+            'PathGainsOutputPort',true);
+
+rayChan3 = comm.RayleighChannel(...
+            'SampleRate',fs, ...
+            'PathDelays',[0 1.5]/fs, ...
+            'AveragePathGains',[2 3], ...
+            'NormalizePathGains',true, ...
+            'MaximumDopplerShift',30, ...
+            'DopplerSpectrum',{doppler('Gaussian',0.6),doppler('Flat')}, ...
+            'RandomStream','mt19937ar with seed', ...
+            'Seed',22, ...
+            'PathGainsOutputPort',true);
+
+[tx_s, rx_s1, rx_s2, rx_s3, xtf, xrf1, xrf2, xrf3] = do_it(rayChan1, rayChan2, rayChan3, mod);
+scatterplot(tx_s(9:128))
+scatterplot(xtf(65:1024), 8)
+scatterplot(xrf1(65:1024), 8)
+scatterplot(rx_s1(9:128))
+scatterplot(xrf2(65:1024), 8)
+scatterplot(rx_s2(9:128))
+scatterplot(xrf3(65:1024), 8)
+scatterplot(rx_s3(9:128))
+
+
+function [tx_s, rx_s1, rx_s2, rx_s3, xtf, xrf1, xrf2, xrf3] = do_it(channel1, channel2, channel3, modulation_idx)
+
+spf = 4096;  % samples per frame
+n_signals = 1;
+n_span_sym = 8;
+fc_d = 902e6;  % Central frequency for digital modulations
+fc_a = 100e6;  % Central frequency for analog modulations
+fc_am = 50e3;  % Central frequency for AM
+transDelay= 2*n_span_sym;
+fs = 0.2e6;
+RC = 0.35;
+
+modulationTypes = categorical(["BPSK", "QPSK", "8-PSK", ...
+    "16-APSK", "32-APSK", "64-APSK", "128-APSK", "256-APSK",...
+    "PAM4", "16-QAM", "32-QAM", "64-QAM", "128-QAM", "256-QAM", ... 
+    "GFSK", "CPFSK", "OQPSK", "B-FM", "DSB-AM", "SSB-AM"]);
+
+    Ls = 8;
+    Ms = 1;
+    sps = Ls / Ms;
+    modulation = modulationTypes(modulation_idx);
+    n_symb = spf/sps;
+    
+    dataSrc = createBitData(modulation, sps, 2*Ms*spf, fs);
+    mod = getModulator(modulation, Ls, n_span_sym, RC, fs, fc_am);
+    %demod = getDemodulator(modulation, Ls, n_span_sym, RC, fs, fc_a);
+    tx_filt = getTxFilt(modulation, Ls, Ms, n_span_sym, RC);
+    rx_filt = getRxFilt(modulation, Ls, Ms, n_span_sym, RC);
+
+    for i = 1:n_signals
+        xts = dataSrc();
+        xtm = mod(xts);
+        xtf = tx_filt(xtm);
+        [xrf1, pathgains] =channel1(xtf);
+        [xrf2, pathgains] =channel2(xtf);
+        [xrf3, pathgains] =channel3(xtf);
+        
+        %xrs = demod(xrm);
+        % Create frame
+        startIdx = Ls*transDelay;
+        tx_s = xtm(startIdx/Ls+(1:n_symb));
+        xrm1 = rx_filt(xrf1);
+        rx_s1 = xrm1(startIdx/Ls+n_span_sym+(1:n_symb));  % There is a delay of n_span_sym btw tx_s and rx_s
+        xrm2 = rx_filt(xrf2);
+        rx_s2 = xrm2(startIdx/Ls+n_span_sym+(1:n_symb));
+        xrm3 = rx_filt(xrf3);
+        rx_s3 = xrm3(startIdx/Ls+n_span_sym+(1:n_symb));
+    end
+end

@@ -7,7 +7,6 @@ n_span_sym = 8;
 fc_d = 902e6;  % Central frequency for digital modulations
 fc_a = 100e6;  % Central frequency for analog modulations
 fc_am = 50e3;  % Central frequency for AM
-transDelay=50;
 
 applyRandomFrame = false;
 

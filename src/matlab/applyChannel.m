@@ -1,4 +1,4 @@
-function res = applyChannel(x, channel, snr, fs)
+function res = applyChannel(x, channel, fs)
 
 switch channel
     case {"Rayleigh"}
@@ -32,6 +32,5 @@ switch channel
     otherwise
         error(channel)
 end
-res = awgn(res, snr, 'measured');
 
 end
