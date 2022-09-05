@@ -1,5 +1,5 @@
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 
 from kdmc.data.rml2016_10a import get_rml2016_10a_datasets
 from kdmc.data.s1024 import get_s1024_datasets
@@ -7,7 +7,7 @@ from kdmc.data.sbasic_nf import get_sbasic_datasets
 import kdmc.data.synthetic as ds
 from kdmc.data.rml2018 import get_rml2018_datasets, RML2018_D
 from kdmc.data.rml2018r import get_rml2018r_datasets
-from .utils import DatasetMixer, SubsetDataset
+from .utils import BatchMixerSampler, DatasetMixer, SubsetDataset
 
 
 def get_datasets(args):
@@ -87,8 +87,14 @@ def create_dataloaders(args, trainset, testset):
         if args.n_batches * args.batch_size > len(trainset):
             raise ValueError(f"n_batches * batch_size > len(trainset)")
         trainset = SubsetDataset(trainset, np.random.choice(len(trainset), args.n_batches * args.batch_size, replace=False))
+    if args.dataset in ('sm_rml2018'):
+        tr_sampler = BatchMixerSampler(trainset, args.batch_size)
+    else:
+        tr_sampler = RandomSampler(trainset)
     trainloader = DataLoader(
-        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
+        trainset, batch_size=args.batch_size, sampler=tr_sampler, 
+        num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
     testloader = DataLoader(
-        testset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
+        testset, batch_size=args.batch_size, shuffle=False,
+        num_workers=args.n_workers, pin_memory=True, persistent_workers=True)
     return trainloader, testloader

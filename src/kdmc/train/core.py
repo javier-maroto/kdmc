@@ -5,10 +5,10 @@ import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
-from kdmc.train.at import AMLATTrainer, ATTrainer, LNRATTrainer, MLATTrainer, SelfMLATTrainer, SoftMLATTrainer
+from kdmc.train.at import AMLATTrainer, ATTrainer, LNRATTrainer, MLATTrainer, MMLATTrainer, SelfMLATTrainer, SoftMLATTrainer
 from kdmc.train.base import MLTrainer
 from kdmc.train.rslad import RSLADTrainer
-from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, STDTrainer, SelfMLSTDTrainer
+from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, MMLSTDTrainer, STDTrainer, SelfMLSTDTrainer
 from kdmc.model.resnet import ResNet_OShea
 
 
@@ -62,8 +62,12 @@ def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_up
     elif args.loss == 'rslad':
         return RSLADTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     elif args.loss == 'std_ml':
+        if args.dataset in ('sm_rml2018'):
+            return MMLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
         return MLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_ml':
+        if args.dataset in ('sm_rml2018'):
+            return MMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
         return MLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_aml':
         return AMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)

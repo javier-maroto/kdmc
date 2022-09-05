@@ -9,9 +9,16 @@ def parse_attack(net, atk_arg):
         spr = FFloat(atk_arg[2])
         r_alpha = FFloat(atk_arg[3])
         steps = int(atk_arg[4])
-        if norm == 'Linf':
-            atk = PGD(net, eps=0, alpha=0, steps=steps)
-            return SPR_Attack(atk, spr, r_alpha)
+    # We do random initialization and allow bigger than 1 step size
+    elif atk_arg[0] == 'fgsm':
+        norm = 'Linf'
+        spr = FFloat(atk_arg[1])
+        r_alpha = FFloat(atk_arg[2])
+        steps = 1
+    if norm == 'Linf':
+        # we put placeholders for eps and alpha since they are changed
+        atk = PGD(net, eps=0, alpha=0, steps=steps) 
+        return SPR_Attack(atk, spr, r_alpha)
     
 
 class SPR_Attack:
