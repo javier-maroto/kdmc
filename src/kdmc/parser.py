@@ -42,7 +42,7 @@ def parse_args(args=None):
     parser.add_argument('--time_samples', type=int, help='Number of time samples of the IQ signal')
     parser.add_argument('--return_ml', action='store_true', help='Return the maximum likelihood')  # DEPRECATED
     # Parameter for mixed synthetic and real data
-    parser.add_argument('--synth_weight', nargs="+", default=0.5, type=float, help='Mix weights')
+    parser.add_argument('--synth_weight', default=0.5, type=float, help='Mix weights')
     # Parameters for AKD and self distillation
     parser.add_argument('--kt_path', nargs="+", help='path of the stored models')
     parser.add_argument('--kt_alpha', type=float, help='Mixing rate (1.0 = only use kt preds)')

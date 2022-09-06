@@ -325,7 +325,7 @@ class SRML2018(Synthetic):
         "128-QAM",
         "256-QAM"
     )
-    filename = "srml2018.mat"
+    folder = "synthetic/signal/srml2018"
     time_samples = 1024
 
     def __init__(self, raw_path, dataset_size=None):
@@ -336,24 +336,16 @@ class SRML2018(Synthetic):
         self.len = self.iq.shape[0]
 
     def load(self, dataset_size=None):
-        with open(self.data_path.joinpath('rx_x.npy'), 'rb') as f:
-            rx_x = np.load(f)
-        with open(self.data_path.joinpath('rx_s.npy'), 'rb') as f:
-            rx_s = np.load(f)
-        with open(self.data_path.joinpath('y.npy'), 'rb') as f:
-            y = np.load(f)
-        with open(self.data_path.joinpath('snr.npy'), 'rb') as f:
-            snr = np.load(f)
-        with open(self.data_path.joinpath('snr_filt.npy'), 'rb') as f:
-            snr_filt = np.load(f)
-        with open(self.data_path.joinpath('sps.npy'), 'rb') as f:
-            sps = np.load(f)
-        with open(self.data_path.joinpath('rolloff.npy'), 'rb') as f:
-            rolloff = np.load(f)
-        with open(self.data_path.joinpath('fs.npy'), 'rb') as f:
-            fs = np.load(f)
-        with open(self.data_path.joinpath('channel.npy'), 'rb') as f:
-            channel = np.load(f)
+        params = np.load(self.data_path.joinpath('params.npz'))
+        y = params['y']
+        snr = params['snr']
+        snr_filt = params['snr_filt']
+        sps = params['sps']
+        rolloff = params['rolloff']
+        fs = params['fs']
+        channel = params['channel']
+        rx_x = np.load(self.data_path.joinpath('rx_x.npy'), mmap_mode='r')
+        rx_s = np.load(self.data_path.joinpath('rx_s.npy'), mmap_mode='r')
         modulation = np.argmax(y, axis=1)
         modulation = np.array([self.classes[i] for i in modulation])
         return rx_x, rx_s, y, modulation, snr, snr_filt, sps, rolloff, fs, channel
