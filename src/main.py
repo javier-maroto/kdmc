@@ -15,7 +15,7 @@ def main():
 
     args = parse_args()
 
-    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=args.root_path, group=f'{args.id}_{args.dataset_size}')
+    wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=str(args.root_path), group=f'{args.id}_{args.dataset_size}')
     wandb.config.update(args)
 
     # Seed
