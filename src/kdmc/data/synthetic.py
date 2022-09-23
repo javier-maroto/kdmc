@@ -64,6 +64,7 @@ class Synthetic(Dataset, ABC):
         self.reorder = np.array([np.nonzero(self.ALL_CLASSES == x) for x in self.classes])
         self.reorder = np.ravel(self.reorder)
         if not os.path.isfile(self.data_path.joinpath(self.filename)):
+            print("Dataset not in", self.data_path.joinpath(self.filename))
             print("Creating dataset...")
             self.create_dataset(dataset_size)
         else:

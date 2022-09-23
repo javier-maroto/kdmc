@@ -3,6 +3,9 @@ import numpy as np
 import torch
 import wandb
 import torch.profiler as tpf
+import logging
+import logging.handlers
+import os
 
 from kdmc.data.core import create_dataloaders, get_datasets
 from kdmc.parser import parse_args
@@ -17,6 +20,14 @@ def main():
 
     wandb.init(project=f"kdmc_{args.dataset}", name=args.id, dir=str(args.root_path), group=f'{args.id}_{args.dataset_size}')
     wandb.config.update(args)
+    loglevel = ("DEBUG" if args.debug else "INFO")
+    handler = logging.handlers.WatchedFileHandler(
+        os.environ.get("LOGFILE", args.log_path))
+    formatter = logging.Formatter(logging.BASIC_FORMAT)
+    handler.setFormatter(formatter)
+    root = logging.getLogger()
+    root.setLevel(os.environ.get("LOGLEVEL", loglevel))
+    root.addHandler(handler)
 
     # Seed
     torch.manual_seed(args.seed)

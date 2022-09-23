@@ -5,10 +5,10 @@ import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
 from kdmc.train.akd import AKDTrainer
-from kdmc.train.at import AMLATTrainer, ATTrainer, LNRATTrainer, MLATTrainer, MMLATTrainer, SelfMLATTrainer, SoftMLATTrainer
+from kdmc.train.at import AMLATTrainer, ATTrainer, GLNRATTrainer, GMLATTrainer, LNRATTrainer, MLATTrainer, MMLATTrainer, SelfMLATTrainer, YAMLATTrainer, YGMLATTrainer, YMLATTrainer
 from kdmc.train.base import MLTrainer
 from kdmc.train.rslad import RSLADTrainer
-from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, MMLSTDTrainer, STDTrainer, SelfMLSTDTrainer
+from kdmc.train.std import LNRSTDTrainer, MLSTDTrainer, MMLSTDTrainer, STDTrainer, SelfMLSTDTrainer, YMLSTDTrainer
 from kdmc.model.resnet import ResNet_OShea
 
 
@@ -55,33 +55,46 @@ def resume_from_checkpoint(path, net, optimizer, scheduler):
 def get_trainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
     if args.loss == 'std':
         return STDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
-    elif args.loss == 'at':
-        return ATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-    elif args.loss == 'akd':
-        return AKDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-    elif args.loss == 'rslad':
-        return RSLADTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     elif args.loss == 'std_ml':
         if args.dataset in ('sm_rml2018'):
             return MMLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
         return MLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'std_yml':
+        return YMLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'std_lnr':
+        return LNRSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at':
+        return ATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     elif args.loss == 'at_ml':
         if args.dataset in ('sm_rml2018'):
             return MMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
-        return MLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+        if args.dataset in ('sbasic', 'sawgn', 'sawgn2p'):
+            return GMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+        else:
+            return MLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_aml':
         return AMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_yml':
+        if args.dataset in ('sbasic', 'sawgn', 'sawgn2p'):
+            return YGMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+        else:
+            return YMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_yaml':
+        return YAMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'at_lnr':
+        if args.dataset in ('sbasic', 'sawgn', 'sawgn2p'):
+            return GLNRATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+        else:
+            return LNRATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'at_sml':
         return SelfMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
-    elif args.loss == 'at_yml':
-        return SoftMLATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
-    elif args.loss == 'std_lnr':
-        return LNRSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
-    elif args.loss == 'at_lnr':
-        return LNRATTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'std_sml':
         return SelfMLSTDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
     elif args.loss == 'ml':
         return MLTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=slow_rate)
+    elif args.loss == 'akd':
+        return AKDTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
+    elif args.loss == 'rslad':
+        return RSLADTrainer(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
     else:
         raise NotImplementedError(f"loss not implemented: {args.loss}")

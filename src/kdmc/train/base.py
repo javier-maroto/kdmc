@@ -102,6 +102,36 @@ class Trainer(abc.ABC):
                 ml_preds[idx] = ml_preds_
         return ml_preds
 
+    def get_gaussian_ml_preds(self, batch, x_adv):
+        """Applies the rx filter as well and adds the perturbation noise to the snr (assumes they
+        are independent noises)"""
+        ml_model = MaxLikelihoodModel(
+            self.data_path.joinpath('synthetic/signal/states'), self.classes, device=self.device)
+        sps = batch['sps']
+        rolloff = batch['rolloff']
+        n_span_symb = 8
+        target_mask = (batch['y'] * ml_model.supported).sum(-1) == 1
+        ml_preds = torch.zeros([x_adv.shape[0], get_num_classes(self.dataset)], device=self.device)
+        for a in sps.unique():
+            for b in rolloff.unique():
+                mask = ((sps == a) & (rolloff == b) & target_mask).to(self.device)
+                if mask.sum() == 0:
+                    continue
+                x = batch['x'][mask].to(self.device)
+                snr_ml = batch['snr_filt'][mask].to(self.device)
+                y = batch['y'][mask].to(self.device)
+                ls = a.numpy().astype(np.int)
+                rf = b.numpy()
+                while ls * n_span_symb >= x.shape[-1]:
+                    n_span_symb //= 2
+                ml_model.create_filter(Ls=ls, rolloff=rf, n_span_symb=n_span_symb)
+                ml_preds_ = ml_model.compute_advml(x, x_adv[mask], snr_ml)
+                ml_preds_ = ml_model.adapt_unsupported(ml_preds_, y)
+                ml_preds[mask] = ml_preds_
+        y = batch['y'][~target_mask].to(self.device)
+        ml_preds[~target_mask] = y
+        return ml_preds
+
     def loop_fast(self, epoch):
         self.train(epoch)
         if self.sch_updt == 'epoch':

@@ -16,7 +16,7 @@ def parse_args(args=None):
     parser.add_argument('--debug', action='store_true', help='Debug mode')
     # Path parameters
     parser.add_argument('--root_path', default='.')
-    parser.add_argument('--data_path')
+    parser.add_argument('--data_path', default='/SCRATCH2/maroto/kdmc/')
     # Parameters for training
     parser.add_argument('--loss', default='std', help='loss used')
     parser.add_argument('--n_epochs', default=50, type=int, help='Num of training epochs')
@@ -58,6 +58,7 @@ def parse_args(args=None):
         args.data_path = args.root_path / 'data'
     else:
         args.data_path = Path(args.data_path)
+    args.log_path = args.root_path / 'logs' / 'debug.log'
     # Check only 10 batches when profiling
     if args.profile:
         args.n_batches = 10
