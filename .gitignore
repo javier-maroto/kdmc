@@ -141,3 +141,13 @@ data/*
 checkpoint
 results
 profiler
+
+# Latex files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.pdf
+*.synctex.gz
