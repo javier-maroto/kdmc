@@ -151,3 +151,4 @@ profiler
 *.out
 *.pdf
 *.synctex.gz
+*.txt

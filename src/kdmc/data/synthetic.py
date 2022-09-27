@@ -34,7 +34,7 @@ def split_synthetic_dataset(dataset, seed=0):
 
 
 class Synthetic(Dataset, ABC):
-    """Dataset class. They normally have 2.6M samples in total."""
+    """Dataset class. They normally have 260000 samples in total."""
 
     ALL_CLASSES = np.array([
         "BPSK", "QPSK", "8-PSK",
