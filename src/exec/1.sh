@@ -1,6 +1,6 @@
-for seed in 0 1
+for seed in 0
 do
-    for dataset in sawgn2p sp0c20
+    for dataset in sbasic
     do
         for loss in std std_ml std_lnr
         do
@@ -37,25 +37,6 @@ do
                 do
                     python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed --atk pgd Linf $spr 0.25 7 --dataset_size $dataset_size --kt_alpha $alpha
                 done
-            done
-        done
-    done
-    dataset=sp0c20
-    for spr in 30 25 20
-        do
-        loss=at_aml
-        python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed --atk pgd Linf $spr 0.25 7
-        for dataset_size in 100000 1000000
-        do
-            python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed --atk pgd Linf $spr 0.25 7 --dataset_size $dataset_size
-        done
-        loss=at_yaml
-        for alpha in 0.2 0.4 0.6 0.8
-        do
-            python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed --atk pgd Linf $spr 0.25 7 --kt_alpha $alpha
-            for dataset_size in 100000 1000000
-            do
-                python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed --atk pgd Linf $spr 0.25 7 --dataset_size $dataset_size --kt_alpha $alpha
             done
         done
     done
