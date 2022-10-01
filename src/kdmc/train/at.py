@@ -149,6 +149,7 @@ class LNRATTrainer(Trainer):
             ml_preds = ml_preds[lnr_mask]
 
             snr = batch['snr'].to(self.device)
+            snr = snr[lnr_mask]
             adv_inputs = self.atk(inputs, targets, snr)
             outputs = self.net(adv_inputs)
 
