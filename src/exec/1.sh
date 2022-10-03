@@ -2,7 +2,8 @@ for seed in 0
 do
     for dataset in sbasic
     do
-        for loss in std std_ml std_lnr
+        spr=20
+        for loss in at at_ml at_lnr
         do
             python src/main.py --dataset $dataset --loss $loss --n_epochs 100 --sch_gamma 0.95 --id $loss --batch_size 1024 --seed $seed
             for dataset_size in 100000 1000000
