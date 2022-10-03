@@ -36,7 +36,7 @@
 %\address{$^{\star}$ EPFL, Switzerland \\
 %  $^{\dagger}$armasuisse Science\&Technology, Cyber-Defence Campus, Switzerland}
   
-\title{ML distillation
+\title{Improving modulation classification by distilling maximum likelihood
 \thanks{This work has been sponsored by armasuisse Science and Technology with the project ARNO (project code ???).}
 }
 
@@ -55,6 +55,7 @@
 \maketitle
 
 \begin{abstract}
+In communication systems, there are many tasks, like modulation classification, for which Deep Neural Networks (DNNs) have obtained promising performance. However, these models have been shown to be susceptible to adversarial perturbations, namely imperceptible additive noise crafted to induce misclassification. This raises questions about the security but also about the general trust in model predictions. We propose to use adversarial training, which consists of fine-tuning the model with adversarial perturbations, to increase the robustness of automatic modulation classification (AMC) models. We show that current state-of-the-art models can effectively benefit from adversarial training, which mitigates the robustness issues for some families of modulations. We use adversarial perturbations to visualize the learned features, and we found that the signal symbols are shifted towards the nearest classes in constellation space, like maximum likelihood methods when adversarial training is enabled. This confirms that robust models are not only more secure, but also more interpretable, building their decisions on signal statistics that are actually relevant to modulation classification.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -62,22 +63,54 @@
 
 \section{Introduction}
 
-% 
+% AMC, deep learning is being used. Different solutions
+Multiple civil and military applications in communication systems require recognizing with what modulation the information received was encoded. This leads to the use of Automatic Modulation Classification (AMC) on applications ranging from detecting daily radio stations and managing spectrum resources, to eavesdropping and interfering with radio communications. With the emergence of deep learning \cite{goodfellow2016deep}, neural networks made their way into AMC, and are currently the main and most effective method that tackles this problem \cite{OShea_Roy_Clancy_2018}. Compared with previous methods, like feature extraction \cite{xie2008efficient,zhou2013design,zhang2017wireless} or maximum likelihood functions \cite{huan1995likelihood,dobre2007survey,hameed2009likelihood}, neural networks are relatively fast, adaptable to any channel characteristics, and their performance scales well with high quantities of data.
 
-Deep learning \cite{goodfellow2016deep}
-
-%Adversarial perturbations
-Recent studies have highlighted security issues in DNNs models \cite{Szegedy_Zaremba_Sutskever_Bruna_Erhan_Goodfellow_Fergus_2014, moosavi2017universal,Sadeghi_Larsson_2019,Lin_Zhao_2020,Flowers_Buehrer_Headley_2019, maroto2021benefits}. Specifically, those models have been shown to be vulnerable to adversarial examples, which are carefully crafted but almost imperceptible perturbations, namely adversarial perturbations, that are added to a real data sample. For AMC, a perturbation can be crafted by solving the following optimization:
+% Effect of adversarial perturbations.
+% TODO: maybe add motivation of why robust models are important
+%
+Recent studies have highlighted that the neural networks used in AMC are susceptible to adversarial attacks \cite{Szegedy_Zaremba_Sutskever_Bruna_Erhan_Goodfellow_Fergus_2014, moosavi2017universal,Sadeghi_Larsson_2019,Lin_Zhao_2020,Flowers_Buehrer_Headley_2019, maroto2021benefits}, in which carefully crafted but almost imperceptible perturbations are added to the transmitted signal. These adversarial perturbations can be used as an effective way of jamming wireless communication systems, requiring much less energy and being stealthier than normal attacks. To craft them, algorithms like FGSM \cite{Goodfellow_Shlens_Szegedy_2015} or PGD \cite{Madry_Makelov_Schmidt_Tsipras_Vladu_2019} are typically used to solve the following optimization:
 \begin{equation}
 \label{eq:adv_pert}
     \delta_i^* = \argmax_{\delta_i}\Ls(f_{\theta}(x_i + \delta_i), y_i) \quad \text{s.t.} \quad \lVert \delta_i \rVert_{\infty} \leq \varepsilon
 \end{equation}
+where $\delta_i^*$ is the adversarial perturbation added to the received signal $x_i$, $y_i$ is the one-hot-encoded vector of length K that encodes the modulation used, $\Ls$ is the cross-entropy loss, $f_{\theta}$ is the neural network defined with weights $\theta$, and $\varepsilon$ is a fixed value that constrains the norm of the perturbation to be small and imperceptible.
+
+% Defenses. Relationship with data. Knowledge distillation
+Some defenses have been proposed to make networks more robust, like adversarial training \cite{Madry_Makelov_Schmidt_Tsipras_Vladu_2019}, but it comes at a cost in accuracy and computational time. Some works have instead tried to understand why networks are susceptible, and label noise has been pointed as one of the main causes \cite{sanyal2020benign}. This is consistent with the increase in robustness when using knowledge distillation in combination with adversarial training~\cite{goldblum2020adversarially,zi2021revisiting,shao2021and,maroto2022benefits}, essentially training a student model with labels based on the teacher predictions.
+
+% Our work, what are the main motivations. Contributions.
+In this work, we propose a data-centric approach with the purpose of making neural networks more accurate and robust to adversarial attacks. Motivated by the success of knowledge distillation, we propose to reduce the label noise in the training data by using the theoretical class probabilities, derived from the noise distribution of the channel with the maximum likelihood function. We show that neural networks trained with these probabilities perform better than if trained with the original labels, confirming the effect of label noise in robustness.
+
+
+\section{Related Work}
+
+% Maximum likelihood. 
+%   (More details can be found in "Survey of automatic modulation classification techniques").
+Maximum likelihood \cite{huan1995likelihood,dobre2007survey,hameed2009likelihood} is the analytical solution of the AMC task. It computes the likelihood function of the received signal with all possible modulations and estimates the most likely modulation. While in theory this is Bayes-optimal, it is computationally expensive and requires prior knowledge of the channel characteristics, so sub-optimal approximations are used in practice \cite{dobre2007survey,Hameed_Dobre_Popescu_2009}.
+
+% Recent approaches. Explain and reference.
+Deep learning \cite{goodfellow2016deep} has been proposed as a better solution to recognize modulations. %In comparison with the above approaches, it has two clear advantages. It has low complexity which, unlike maximum likelihood methods, scales linearly, and can be trained end-to-end. This increases the quantity and quality of features extracted from the data compared to feature recognition methods. It also allows for extra flexibility, since it does not require any assumption on the channel conditions but learns them directly from the data.
+There are mainly two types of Deep Learning models for modulation recognition. On the one hand, inspired by success in speech recognition, some works \cite{Rajendran_Meert_Giustiniano_Lenders_Pollin_2018,Guo_Jiang_Wu_Zhou_2020} propose architectures based on long short-term memory networks (LSTMs) \cite{Hochreiter_Schmidhuber_1997} for modulation recognition. On the other hand, other works \cite{OShea_Corgan_Clancy_2016,West_OShea_2017,Sadeghi_Larsson_2019} employ convolutional neural networks (CNNs) \cite{Krizhevsky_Sutskever_Hinton_2017}, which have been successful in computer vision thanks to their ability to induce translation invariance on the input. The current state-of-the-art in modulation recognition \cite{OShea_Roy_Clancy_2018} uses a model based on the ResNet architecture \cite{Szegedy_Ioffe_Vanhoucke_Alemi_2016}. However, despite their improved performance, there are drawbacks in deep learning approaches compared with the classical methods. In particular, they are black-box models, making them much less interpretable than their classical counterparts, and they are vulnerable to crafted small energy perturbations, which compromise the security of the system against malicious attacks.
+
+% Defenses to adversarial attacks
+Adversarial perturbations have also been shown to fool DNNs trained for the task of modulation recognition in a recent work \cite{Sadeghi_Larsson_2019}. The authors propose to make the power of the perturbation dependent on the signal power. They fix the ratio between the signal and the perturbation power, or signal-to-perturbation ratio (SPR), when studying the effect of the perturbations. They test two different scenarios: white-box attacks, where the attacker has access to the model gradients, and black-box attacks, where only the prediction can be accessed. For the white-box setting, they use the Fast Gradient Sign Method (FGSM) \cite{Goodfellow_Shlens_Szegedy_2015} to craft the perturbations, and found that adversarial perturbations require much less power than additive white gaussian noise (AWGN) to fool the network. The authors in \cite{Flowers_Buehrer_Headley_2019} further expand over prior work \cite{Sadeghi_Larsson_2019} using the bit error rate (BER) as a measure of distortion. Additionally, they consider the scenario where the adversarial perturbation is crafted at the transmitter in order to protect the model against eavesdropping. However, in the work they assume perfect knowledge of the DNN used by the eavesdropper, which we think is unrealistic and would fail if there are several eavesdroppers using different modulation recognition models.
+
+% Knowledge distillation
+KD consists on training a student model to mimic the outputs of a teacher model. To that end, most KD methods~\cite{hinton2015distilling,romero2014fitnets,zagoruyko2016paying,chebotar2016distilling} append a matching function to the loss which encourages the final representations of the teacher and the student to be close at every sample.
+While these methods are effective in transferring clean performance, they are not able to transfer robustness against adversarial examples~\cite{goldblum2020adversarially}. For this reason, recent works have proposed alternatives to address this problem~\cite{goldblum2020adversarially,zi2021revisiting,zhu2021reliable,shao2021and,maroto2022benefits}, that encourage robustness by matching the output of the teacher and student models in the adversarial examples as well.
 
 \section{Maximum likelihood}
 
-Normally, to perform well on automatic modulation classification (AMC), neural networks are trained to infer the modulation used in transmission from the signal received. Thus, the network will be optimized to be as confident and accurate as possible on the training set. However, while enforcing the network to accurately solve the task is feasible for signals with high SNR, on noisier signals this may no longer the case. The reason is that there could be a non-negligible probability that the signal received was generated from a different modulation than the one we are enforcing the model to predict. In some extreme cases, the noise can even make the task impossible to solve, where the signal received could have been generated from any of multiple modulations with similar probability.
+Normally, to perform well on automatic modulation classification (AMC), neural networks are trained to infer the modulation used in transmission from the signal received. Thus, the network will be optimized to be as confident and accurate as possible on the training set. However, while enforcing the network to accurately solve the task is feasible for signals with high SNR, on noisier signals typically there is a non-negligible probability that the signal received was generated from a different modulation than the one we are enforcing the model to predict. Such cases are numerous when testing models in the AMC literature, where the signal received could have been generated from any of multiple modulations with similar probability.
 
-In many other tasks, these probabilities would be difficult or impossible to obtain. However, in AMC, there is an optimal method that gives us these probabilities with perfect accuracy: Maximum Likelihood (ML). Despite its optimal performance, neural networks are still preferred over ML for a simple reason: ML does not perform well when we do not have full knowledge of the channel effects on the signal. In fact, even if we were to estimate the channel, any small deviation from the real channel parameters has a major effect on the ML performance. Moreover, incorporating this uncertainty in the ML formulation makes it computationally unfeasible.
+While in many other tasks, these probabilities would be difficult or impossible to obtain, in AMC, we can use the maximum likelihood (ML) function to derive the real probabilities. Due to the characteristics of ML, this is only computationally feasible on coherent scenarios, where we have prior knowledge of the channel conditions. Particularly, if we assume the channel is gaussian with variance $\sigma^{2}$, and given the received symbols $r(x)$, where $r$ applies the proper communication filter and downsampling to the received signal, the corresponding ML function is described as
+\begin{equation}
+	f_{i}(r(x)) = \dfrac{1}{2\pi \sigma^{2}|M_i|}\prod_{t=1}^{T} \sum_{j=1}^{|M_i|} \exp\left(-\dfrac{\lVert r(x)_t - s_j\rVert^{2}}{2 \sigma^{2}}\right)
+\end{equation}
+where $f_{i}$ is the ML function for a given modulation $M_i$ with $|M_i|$ number of states, $T$ is the number of symbols, $r(x)_t$ is the t-th symbol received, and $s_j$ is the symbol that correspond to the state $j$. Given a set of modulations, the probability of a modulation $M_i$ would be $p_{ML}^{(i)}(x) = \log(f_{i}(r(x))) / \sum_i \log(f_{i}(r(x)))$
+
+The reason why ML is not prefered over neural networks is simple: they perform badly on non-coherent scenarios, where the channel or transmision filter parameters are unknown. Moreover, any small deviation from the real channel parameters has a major effect on the ML performance, which discards the possibility of trying to estimate these parameters. Moreover, incorporating the parameter uncertainty in the ML formulation makes it much more costly computationally without being more performant than neural networks.
 
 Based on these limitations, we propose a hybrid approach. We will use a neural network for inference, but we will train it with the probabilities given by maximum likelihood. This is feasible when we consider that we can have full knowledge of the channel conditions by generating the training samples ourselves. Moreover, after training the neural network, ML is no longer needed. Thus allowing our model to be usable under unknown channel conditions, which is typical in real AMC scenarios.
 
@@ -147,9 +180,9 @@ For the third and final scenario, we use the transmitter settings of the first s
 		ST & $85.87 \pm 0.02$ & $19.51 \pm 0.25$ \\ 
 		ST\_LNR & $86.34 \pm 0.52$ & $24.61 \pm 1.09$ \\ 
 		ST\_ML & $86.59 \pm 0.32$ & $27.30 \pm 0.47$ \\ 
-		AT & nan \\ 
-		AT\_LNR & nan \\ 
-		AT\_ML & nan \\ 
+		AT & $57.36 \pm 3.12$ & $54.71 \pm 2.67$ \\ 
+		AT\_LNR & $64.50 \pm 0.62$ & $58.44 \pm 0.60$ \\ 
+		AT\_ML & $67.01 \pm 1.04$ & $59.44 \pm 0.32$ \\ 
     \end{tabular}
     \caption{Accuracy and robustness for the ResNet model on the first dataset. The adversarial attacks are crafted using $l_{\infty}$ PGD-7 of 20 dB SPR.}
     \label{tab:sbasic}
@@ -179,17 +212,22 @@ For the third and final scenario, we use the transmitter settings of the first s
 	\begin{tabular}{c|cc}
 	    Method & Accuracy & Robustness \\
 		\hline
-		ST & $78.33 \pm 0.03$ & $18.83 \pm 2.59$ \\ 
-		ST\_LNR & $78.07 \pm 0.05$ & $17.86 \pm 3.31$ \\ 
-		ST\_ML & $78.27 \pm 0.06$ & $20.73 \pm 1.40$ \\ 
-		AT & nan \\ 
-		AT\_LNR & nan \\ 
-		AT\_ML & nan \\ 
+		ST & $78.34 \pm 0.02$ & $18.86 \pm 1.83$ \\ 
+		ST\_LNR & $78.08 \pm 0.04$ & $18.97 \pm 3.03$ \\ 
+		ST\_ML & $78.40 \pm 0.22$ & $20.00 \pm 1.61$ \\ 
+		AT & $49.00 \pm nan$ & $45.36 \pm nan$ \\ 
+		AT\_LNR & $48.16 \pm nan$ & $46.02 \pm nan$ \\ 
+		AT\_NML & $39.78 \pm 0.14$ & $36.14 \pm 1.78$ \\ 
+		AT\_AML & $53.83 \pm 0.47$ & $47.04 \pm 0.07$ \\ 
     \end{tabular}
     \caption{Accuracy and robustness for the ResNet model on the third dataset. The adversarial attacks are crafted using $l_{\infty}$ PGD-7 of 20 dB SPR.}
     \label{tab:sp0c20}
 \end{table}
 
+
+\section{Conclusion}
+
+% Future work: ML for Rayleigh/Rician channels. Use in other fields like physics. Test with other KD functions. More models.
 
 
 \bibliographystyle{IEEEbib}
