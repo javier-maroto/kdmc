@@ -9,7 +9,7 @@ def parse_args(args=None):
     parser.add_argument('--id', type=str, help='Run id', default='test')
     parser.add_argument('--seed', default=0, type=int, help='Seed of the model / dataloader')
     parser.add_argument('--resume', '-r', type=str, help='resume from checkpoint')
-    parser.add_argument('--arch', default='resnet', choices=['resnet'], help='Target model architecture')
+    parser.add_argument('--arch', default='resnet', help='Target model architecture')
     parser.add_argument('--profile', action='store_true', help='Profile the model')
     parser.add_argument('--test_ml', action='store_true', help='Test over ml predictions')
     parser.add_argument('--saved_model', type=str, help='Path to model to load')

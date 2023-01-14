@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import ExponentialLR, OneCycleLR, ConstantLR
 from kdmc.data.core import get_num_classes
+from kdmc.model.cldnn import CLDNN
+from kdmc.model.cnn import CNN
 from kdmc.train.akd import AKDTrainer
 from kdmc.train.at import AMLATTrainer, ATTrainer, GLNRATTrainer, GMLATTrainer, LNRATTrainer, MLATTrainer, MMLATTrainer, SelfMLATTrainer, YAMLATTrainer, YGMLATTrainer, YMLATTrainer
 from kdmc.train.base import MLTrainer
@@ -17,6 +19,10 @@ def create_model(args, num_classes=None):
         num_classes = get_num_classes(args.dataset)
     if args.arch == 'resnet':
         net = ResNet_OShea(num_classes, args.time_samples)
+    elif args.arch == 'cldnn':
+        net = CLDNN(args.time_samples, num_classes)
+    elif args.arch == 'cnn':
+        net = CNN(args.time_samples, num_classes)
     else:
         raise NotImplementedError(f"arch not implemented: {args.arch}")
     net = net.to(args.device)
