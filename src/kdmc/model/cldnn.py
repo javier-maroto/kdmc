@@ -101,6 +101,8 @@ class CLDNN(Model):
         self.dense2 = nn.Linear(256, n_classes)
 
     def forward(self, x):
+        if len(x.shape) == 3:
+            x = x.unsqueeze(1)  # Add channel dimension
         channel_dim = 1
         batch_size = x.shape[0]
 
