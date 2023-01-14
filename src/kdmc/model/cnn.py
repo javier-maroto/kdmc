@@ -72,6 +72,8 @@ class CNN(Model):
         self.dense2 = nn.Linear(256, n_classes)
 
     def forward(self, x):
+        if len(x.shape) == 3:
+            x = x.unsqueeze(1)  # Add channel dimension
         x = self.preprocess(x)
 
         x = self.conv1(x)
