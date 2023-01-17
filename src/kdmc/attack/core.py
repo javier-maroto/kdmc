@@ -3,7 +3,7 @@ from kdmc.attack.pgd import PGD
 from kdmc.utils import FFloat
 
 
-def parse_attack(net, atk_arg):
+def parse_attack(net, atk_arg, model_training=False):
     if atk_arg[0] == 'pgd':
         norm = atk_arg[1]
         spr = FFloat(atk_arg[2])
@@ -15,10 +15,15 @@ def parse_attack(net, atk_arg):
         spr = FFloat(atk_arg[1])
         r_alpha = FFloat(atk_arg[2])
         steps = 1
+    
     if norm == 'Linf':
         # we put placeholders for eps and alpha since they are changed
-        atk = PGD(net, eps=0, alpha=0, steps=steps) 
+        atk = PGD(net, eps=0, alpha=0, steps=steps)
+        if model_training:
+            atk.set_model_training_mode(model_training=True)
         return SPR_Attack(atk, spr, r_alpha)
+    else:
+        raise NotImplementedError
     
 
 class SPR_Attack:

@@ -230,7 +230,7 @@ class Trainer(abc.ABC):
         res_path = os.path.join("results", self.id)
         if not os.path.exists(res_path):
             os.makedirs(res_path)
-        
+
         self.net.eval()
         res = {'true': [], 'clean': [], 'snr': []}
         if self.args.test_ml:
@@ -345,13 +345,19 @@ class Trainer(abc.ABC):
             torch.save(state, base_path.joinpath(f'ckpt_last.pth'))
 
     def get_val_attacks(self):
+        atk = PGD(self.net, steps=7)
+        if self.arch == 'cldnn':
+            atk.set_model_training_mode(model_training=True)
         return {
-            'pgd-7_20dB': SPR_Attack(PGD(self.net, steps=7), 20, 0.25),  # Not clamped
+            'pgd-7_20dB': SPR_Attack(atk, 20, 0.25),  # Not clamped
         }
         
     def get_test_attacks(self):
+        atk = PGD(self.net, steps=7)
+        if self.arch == 'cldnn':
+            atk.set_model_training_mode(model_training=True)
         return {
-            'pgd-7_20dB': SPR_Attack(PGD(self.net, steps=7), 20, 0.25)
+            'pgd-7_20dB': SPR_Attack(atk, 20, 0.25),  # Not clamped
         }
 
 

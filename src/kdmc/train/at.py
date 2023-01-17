@@ -14,7 +14,7 @@ class ATTrainer(Trainer):
 
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
 
     def train(self, epoch):
         print('\nEpoch: %d' % epoch)
@@ -48,7 +48,7 @@ class ATTrainer(Trainer):
 class MLATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_ml_preds(self.train_dl, self.ml_preds)
 
     def train(self, epoch):
@@ -85,7 +85,7 @@ class MLATTrainer(Trainer):
 class GMLATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
 
     def train(self, epoch):
         print('\nEpoch: %d' % epoch)
@@ -120,7 +120,7 @@ class GMLATTrainer(Trainer):
 class LNRATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_ml_preds(self.train_dl, self.ml_preds)
         n_signals = len(trainloader.dataset) + len(testloader.dataset)
         self.lnr_mask = torch.zeros([n_signals], device=self.device, dtype=torch.bool)
@@ -172,7 +172,7 @@ class LNRATTrainer(Trainer):
 class GLNRATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
 
     def train(self, epoch):
         print('\nEpoch: %d' % epoch)
@@ -215,7 +215,7 @@ class SelfMLATTrainer(Trainer):
     """For faster compute the ml predictions are stored. Thus, assumes there is no data augmentation"""
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_ml_preds(self.train_dl, self.ml_preds)
         self.alpha = args.kt_alpha
         if self.alpha is None:
@@ -256,7 +256,7 @@ class YMLATTrainer(Trainer):
     """For faster compute the ml predictions are stored. Thus, assumes there is no data augmentation"""
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_ml_preds(self.train_dl, self.ml_preds)
         self.alpha = args.kt_alpha
         if self.alpha is None:
@@ -296,7 +296,7 @@ class YMLATTrainer(Trainer):
 class YGMLATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.alpha = args.kt_alpha
         if self.alpha is None:
             raise ValueError(f"--kt_alpha not defined")
@@ -334,7 +334,7 @@ class YGMLATTrainer(Trainer):
 class AMLATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_adv_ml_preds(self.train_dl, self.ml_preds)
 
     def train(self, epoch):
@@ -371,7 +371,7 @@ class AMLATTrainer(Trainer):
 class YAMLATTrainer(Trainer):
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds = self.get_adv_ml_preds(self.train_dl, self.ml_preds)
         self.alpha = args.kt_alpha
         if self.alpha is None:
@@ -413,11 +413,7 @@ class MMLATTrainer(Trainer):
     It does not assume every training sample has a 'x_ml' attribute."""
     def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
         super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.ml_preds, self.is_ml = self.get_ml_preds(self.train_dl, self.ml_preds)
-    
-    def __init__(self, args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate=5):
-        super().__init__(args, net, trainloader, testloader, optimizer, scheduler, sch_updt, slow_rate)
-        self.atk = parse_attack(self.net, args.atk)
+        self.atk = parse_attack(self.net, args.atk, model_training=(self.arch == 'cldnn'))
         self.ml_preds, self.is_ml = self.get_ml_preds(self.train_dl, self.ml_preds)
 
     def train(self, epoch):
